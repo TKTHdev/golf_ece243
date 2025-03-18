@@ -58,7 +58,7 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
     
     // Calculate the coordinates of the arrow tip
     int tip_x = center_x + (int)(cos_val * arrow_length);
-    int tip_y = center_y - (int)(sin_val * arrow_length); // Invert y because screen y-axis is positive downward
+    int tip_y = center_y + (int)(sin_val * arrow_length); // Invert y because screen y-axis is positive downward
     
     // Draw the arrow body (line from center to tip)
     draw_line(center_x, center_y, tip_x, tip_y, arrow_color);
@@ -66,6 +66,10 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
     // Note: This version only draws the main line of the arrow
     // To add arrowheads, additional code would be needed here
 }
+
+
+
+
 
 /* Wait for vsync to synchronize with the VGA controller */
 int wait_for_vsync()
