@@ -1,13 +1,13 @@
 #include <math.h>
 #include <stdlib.h>
 
-int pixel_buffer_start; // Global variable for pixel buffer
+int pixel_buffer_start; 
 
 /* Function prototypes */
 void clear_screen();
 void draw_line(int x0, int y0, int x1, int y1, short int line_color);
 void plot_pixel(int x, int y, short int line_color);
-void draw_arrow(float cos_val, float sin_val, short int arrow_color);
+void draw_arrow(int center_x,int center_y, float cos_val, float sin_val, short int arrow_color);
 int wait_for_vsync();
 
 int main(void)
@@ -43,20 +43,16 @@ int main(void)
         sin_val = sinf(angle);
         
         // Draw the arrow in the specified direction
-        draw_arrow(cos_val, sin_val, 0xF800); // Draw arrow in red color
+        draw_arrow(160,120,cos_val, sin_val, 0xF800); // Draw arrow in red color
         
         // Synchronize with the VGA controller
         wait_for_vsync();
     }
 }
 
-/* Function to draw an arrow based on the given cosine and sine values */
-void draw_arrow(float cos_val, float sin_val, short int arrow_color)
+/* Function to draw an arrow based on the given starting point, cosine and sine values */
+void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short int arrow_color)
 {
-    // Center point of the screen
-    int center_x = 160;
-    int center_y = 120;
-    
     // Arrow length
     int arrow_length = 80;
     
