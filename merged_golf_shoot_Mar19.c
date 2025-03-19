@@ -4,6 +4,8 @@
 
 /*Merged↓*******************************************************************************************/
 
+//move ball
+
 
 #include <stdint.h>
 
@@ -30,6 +32,7 @@ volatile int count = 1; // counter 1 - 100
 volatile int run = 1; // flag for counter 
 volatile int led0_on = 0; // toggle for LED0 - 0 = off, 1 = on
 volatile int led1_on = 0; // ^ for LED1 
+volatile int spacebar_pressed = 0;
 volatile int total_leds = 0; // combining both
 volatile int break_code = 0; // for ps2 break code 
 
@@ -75,6 +78,7 @@ void config_timer() {
     timer[1] = 7; // control reg - 0b011 - START CONT and ITO bits 
 }
 
+void move_ball(int player);
 
 
 // modified from Listing 6 in Altera® DE1-SoC Computer with Nios V
@@ -116,11 +120,17 @@ void __attribute__((interrupt)) interrupt_handler() {
                     else if (data  == 0x74) {  // right arrow release
                         led1_on = 0;
                     }
+
+                    else if (data  == 0x29) { // spacebar release
+                        spacebar_pressed = 0;
+                    }
+
                     break_code = 0;  // flag for break off 
                 }
                 else {  // not a break code - means pressed 
                     if (data  == 0x29) { // spacebar 
-                        run = 0; // stop counting 
+                       run = 0 ;
+                       spacebar_pressed = 1;
                     }
                     else if (data  == 0x6B) { // left arrow code - after E0
                         led0_on = 1;
@@ -143,7 +153,7 @@ void __attribute__((interrupt)) interrupt_handler() {
 
 
 #define MAX_PLAYER 4
-#define BALL_SIZE 4
+#define BALL_SIZE 12
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 240
 
@@ -201,7 +211,7 @@ int main(void)
     float angle_increment = 0.05; // Angle increment per frame
 
     // Initialize ball
-    balls[0].x = 160;
+    balls[0].x = 0;
     balls[0].y = 120;
     balls[0].color = 0x6666;
     balls[0].isActive = 1;
@@ -209,7 +219,7 @@ int main(void)
     balls[0].dy = 0;
 
 
-    shoot_the_ball(0, 100, 0.0); 
+
 
     /*
     
@@ -249,6 +259,9 @@ int main(void)
     while (1) {
         // Clear the screen for each new frame
         clear_screen();
+
+
+
         
         // Update the angle
         if(led0_on){
@@ -258,6 +271,12 @@ int main(void)
         if(led1_on){
             angle += angle_increment;
         }
+
+
+        if (spacebar_pressed){
+            shoot_the_ball(0, count, angle);
+        }
+
 
         if (angle >= 6.28) { // Reset when reaches 2π (full circle)
             angle = 0.0;
@@ -421,8 +440,8 @@ void plot_pixel(int x, int y, short int line_color)
 // Momentum is the distance the ball will travel
 void shoot_the_ball(int player, int momentum, double angle){
     balls[player].momentum = momentum;
-    balls[player].dx = cos(angle);
-    balls[player].dy = sin(angle);
+    balls[player].dx = cos(angle)*10;
+    balls[player].dy = sin(angle)*10;
 }
 
 void move_ball(int player){
