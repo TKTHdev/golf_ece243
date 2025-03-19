@@ -64,9 +64,11 @@ int main(void)
     balls[0].y = 120;
     balls[0].color = 0x6666;
     balls[0].isActive = 1;
-    balls[0].momentum = 10;
     balls[0].dx = 0;
     balls[0].dy = 0;
+
+
+    shoot_the_ball(0, 100, 0.0); 
     
     // Main loop
     while (1) {
@@ -82,6 +84,7 @@ int main(void)
         // Draw active balls
         for(int i = 0; i < MAX_PLAYER; i++){
             if (balls[i].isActive == 1){
+                move_ball(i);
                 draw_ball(balls[i].x, balls[i].y, balls[i].color);
             }
         }
@@ -235,16 +238,27 @@ void plot_pixel(int x, int y, short int line_color)
 // Momentum is the power of the shot
 // Momentum is the distance the ball will travel
 void shoot_the_ball(int player, int momentum, double angle){
+    balls[player].momentum = momentum;
     balls[player].dx = cos(angle);
     balls[player].dy = sin(angle);
-    for(int i = momentum; i > 0; i--){
-        balls[player].x += balls[player].dx;
-        balls[player].y += balls[player].dy;
-        if(balls[player].x < 0 || balls[player].x > SCREEN_WIDTH){
-            balls[player].dx = -balls[player].dx;
-        }
-        if(balls[player].y < 0 || balls[player].y > SCREEN_HEIGHT){
-            balls[player].dy = -balls[player].dy;
-        }
+}
+
+void move_ball(int player){
+
+    if (balls[player].momentum > 0){
+        balls[player].momentum--;
+    }
+    else{
+        balls[player].dx = 0;
+        balls[player].dy = 0;
+    }
+    balls[player].x += balls[player].dx;
+    balls[player].y += balls[player].dy;
+    //reflect 
+    if (balls[player].x < 0 || balls[player].x > SCREEN_WIDTH){
+        balls[player].dx = -balls[player].dx;
+    }
+    if (balls[player].y < 0 || balls[player].y > SCREEN_HEIGHT){
+        balls[player].dy = -balls[player].dy;
     }
 }
