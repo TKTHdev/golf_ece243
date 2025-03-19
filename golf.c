@@ -1,7 +1,31 @@
 #include <math.h>
 #include <stdlib.h>
 
+
+
+#define MAX_PLAYER 4
+#define BALL_SIZE 4
+
 int pixel_buffer_start; 
+
+
+typedef struct Ball {
+    int x;
+    int y;
+    int radius;
+    int color;
+    int dx;
+    int dy;
+    int isActive;
+    int momentum;
+} Ball;
+
+
+
+
+Ball balls[MAX_PLAYER];
+
+
 
 /* Function prototypes */
 void clear_screen();
@@ -26,6 +50,16 @@ int main(void)
     float sin_val = 0.0;
     float angle = 0.0;
     float angle_increment = 0.05; // Angle increment per frame
+
+
+    balls[0].x = 160;
+    balls[0].y = 120;
+    balls[0].color = 0x6666;
+    balls[0].isActive = 1;
+    balls[0].momentum = 10;
+    balls[0].dx = 0;
+    balls[0].dy = 0;
+
     
     // Main loop
     while (1) {
@@ -36,6 +70,12 @@ int main(void)
         angle += angle_increment;
         if (angle >= 6.28) { // Reset when reaches 2π (full circle)
             angle = 0.0;
+        }
+
+        for(int i = 0; i < MAX_PLAYER; i++){
+            if (balls[i].isActive == 1){
+                draw_ball(balls[i].x, balls[i].y, balls[i].color);
+            }
         }
         
         // Calculate new cosine and sine values
@@ -67,6 +107,17 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
     // To add arrowheads, additional code would be needed here
 }
 
+
+
+/* Draw a filled ball at position (x,y) with the specified color */
+void draw_ball(int x, int y, short int color)
+{
+    for (int i = 0; i < BALL_SIZE; i++) {
+        for (int j = 0; j < BALL_SIZE; j++) {
+            plot_pixel(x + i, y + j, color);
+        }
+    }
+}
 
 
 
@@ -164,4 +215,24 @@ void plot_pixel(int x, int y, short int line_color)
     // Pixel buffer uses (y << 10) + (x << 1) addressing scheme
     one_pixel_address = (volatile short int *)(pixel_buffer_start + (y << 10) + (x << 1));
     *one_pixel_address = line_color; // Set the pixel color
+}
+
+
+//take player id and momentum as input
+//shoot the ball in the direction of the arrow
+//momentum is the power of the shot
+//momentum is the distance the ball will travel
+void shoot_the_ball(int player, int momentum, double angle){
+    balls[player].dx = cos(angle);
+    balls[player].dy = sin(angle);
+    for(momentum; momentum>0; momentum--){
+        balls[player].x += balls[player].dx;
+        balls[player].y += balls[player].dy;
+        if(balls[player].x < 0 || balls[player].x > 320){
+            balls[player].dx = -balls[player].dx;
+        }
+        if(balls[player].y < 0 || balls[player].y > 240){
+            balls[player].dy = -balls[player].dy;
+        }
+    }
 }
