@@ -1,13 +1,15 @@
 #include <math.h>
 #include <stdlib.h>
 
-
-
 #define MAX_PLAYER 4
 #define BALL_SIZE 4
+#define SCREEN_WIDTH 320
+#define SCREEN_HEIGHT 240
 
-int pixel_buffer_start; 
-
+// Global variables for double buffering
+volatile int pixel_buffer_start; // global variable
+short int Buffer1[240][512]; // 240 rows, 512 (320 + padding) columns
+short int Buffer2[240][512];
 
 typedef struct Ball {
     int x;
@@ -20,18 +22,15 @@ typedef struct Ball {
     int momentum;
 } Ball;
 
-
-
-
 Ball balls[MAX_PLAYER];
-
-
 
 /* Function prototypes */
 void clear_screen();
 void draw_line(int x0, int y0, int x1, int y1, short int line_color);
 void plot_pixel(int x, int y, short int line_color);
-void draw_arrow(int center_x,int center_y, float cos_val, float sin_val, short int arrow_color);
+void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short int arrow_color);
+void draw_ball(int x, int y, short int color);
+void shoot_the_ball(int player, int momentum, double angle);
 int wait_for_vsync();
 
 int main(void)
@@ -39,11 +38,20 @@ int main(void)
     // Get the address of the pixel buffer controller
     volatile int * pixel_ctrl_ptr = (int *)0xFF203020;
     
-    /* Read location of the pixel buffer from the pixel buffer controller */
-    pixel_buffer_start = *pixel_ctrl_ptr;
+    /* set front pixel buffer to Buffer 1 */
+    *(pixel_ctrl_ptr + 1) = (int)Buffer1; // first store the address in the back buffer
     
-    // Clear the screen initially
-    clear_screen();
+    /* now, swap the front/back buffers, to set the front buffer location */
+    wait_for_vsync();
+    
+    /* initialize a pointer to the pixel buffer, used by drawing functions */
+    pixel_buffer_start = *pixel_ctrl_ptr;
+    clear_screen(); // pixel_buffer_start points to the pixel buffer
+    
+    /* set back pixel buffer to Buffer 2 */
+    *(pixel_ctrl_ptr + 1) = (int)Buffer2;
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
+    clear_screen(); // pixel_buffer_start points to the pixel buffer
     
     // Initial direction settings (pointing right - cos=1, sin=0)
     float cos_val = 1.0;
@@ -51,7 +59,7 @@ int main(void)
     float angle = 0.0;
     float angle_increment = 0.05; // Angle increment per frame
 
-
+    // Initialize ball
     balls[0].x = 160;
     balls[0].y = 120;
     balls[0].color = 0x6666;
@@ -59,7 +67,6 @@ int main(void)
     balls[0].momentum = 10;
     balls[0].dx = 0;
     balls[0].dy = 0;
-
     
     // Main loop
     while (1) {
@@ -72,6 +79,7 @@ int main(void)
             angle = 0.0;
         }
 
+        // Draw active balls
         for(int i = 0; i < MAX_PLAYER; i++){
             if (balls[i].isActive == 1){
                 draw_ball(balls[i].x, balls[i].y, balls[i].color);
@@ -83,10 +91,11 @@ int main(void)
         sin_val = sinf(angle);
         
         // Draw the arrow in the specified direction
-        draw_arrow(160,120,cos_val, sin_val, 0xF800); // Draw arrow in red color
+        draw_arrow(160, 120, cos_val, sin_val, 0xF800); // Draw arrow in red color
         
         // Synchronize with the VGA controller
-        wait_for_vsync();
+        wait_for_vsync(); // swap front and back buffers on VGA vertical sync
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // new back buffer
     }
 }
 
@@ -98,16 +107,24 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
     
     // Calculate the coordinates of the arrow tip
     int tip_x = center_x + (int)(cos_val * arrow_length);
-    int tip_y = center_y + (int)(sin_val * arrow_length); // Invert y because screen y-axis is positive downward
+    int tip_y = center_y + (int)(sin_val * arrow_length);
     
     // Draw the arrow body (line from center to tip)
     draw_line(center_x, center_y, tip_x, tip_y, arrow_color);
     
-    // Note: This version only draws the main line of the arrow
-    // To add arrowheads, additional code would be needed here
+    // 矢印の先端（三角形）を追加
+    int arrowhead_length = 10;
+    float angle1 = atan2f(sin_val, cos_val) + 2.5;  // 約150度
+    float angle2 = atan2f(sin_val, cos_val) - 2.5;  // 約-150度
+    
+    int head1_x = tip_x + (int)(cosf(angle1) * arrowhead_length);
+    int head1_y = tip_y + (int)(sinf(angle1) * arrowhead_length);
+    int head2_x = tip_x + (int)(cosf(angle2) * arrowhead_length);
+    int head2_y = tip_y + (int)(sinf(angle2) * arrowhead_length);
+    
+    draw_line(tip_x, tip_y, head1_x, head1_y, arrow_color);
+    draw_line(tip_x, tip_y, head2_x, head2_y, arrow_color);
 }
-
-
 
 /* Draw a filled ball at position (x,y) with the specified color */
 void draw_ball(int x, int y, short int color)
@@ -118,9 +135,6 @@ void draw_ball(int x, int y, short int color)
         }
     }
 }
-
-
-
 
 /* Wait for vsync to synchronize with the VGA controller */
 int wait_for_vsync()
@@ -141,8 +155,8 @@ void clear_screen()
 {
     int x, y;
     // Iterate through all pixels on screen (320x240)
-    for (x = 0; x < 320; x++)
-        for (y = 0; y < 240; y++)
+    for (x = 0; x < SCREEN_WIDTH; x++)
+        for (y = 0; y < SCREEN_HEIGHT; y++)
             plot_pixel(x, y, 0x0000); // Set each pixel to black
 }
 
@@ -210,28 +224,26 @@ void draw_line(int x0, int y0, int x1, int y1, short int line_color)
 /* Function to set a specific pixel to the given color */
 void plot_pixel(int x, int y, short int line_color)
 {
+    // Modified to work with the 2D array buffer format
     volatile short int *one_pixel_address;
-    // Calculate the memory address of the pixel
-    // Pixel buffer uses (y << 10) + (x << 1) addressing scheme
-    one_pixel_address = (volatile short int *)(pixel_buffer_start + (y << 10) + (x << 1));
-    *one_pixel_address = line_color; // Set the pixel color
+    one_pixel_address = pixel_buffer_start + (y << 10) + (x << 1);
+    *one_pixel_address = line_color;
 }
 
-
-//take player id and momentum as input
-//shoot the ball in the direction of the arrow
-//momentum is the power of the shot
-//momentum is the distance the ball will travel
+// Take player id and momentum as input
+// Shoot the ball in the direction of the arrow
+// Momentum is the power of the shot
+// Momentum is the distance the ball will travel
 void shoot_the_ball(int player, int momentum, double angle){
     balls[player].dx = cos(angle);
     balls[player].dy = sin(angle);
-    for(momentum; momentum>0; momentum--){
+    for(int i = momentum; i > 0; i--){
         balls[player].x += balls[player].dx;
         balls[player].y += balls[player].dy;
-        if(balls[player].x < 0 || balls[player].x > 320){
+        if(balls[player].x < 0 || balls[player].x > SCREEN_WIDTH){
             balls[player].dx = -balls[player].dx;
         }
-        if(balls[player].y < 0 || balls[player].y > 240){
+        if(balls[player].y < 0 || balls[player].y > SCREEN_HEIGHT){
             balls[player].dy = -balls[player].dy;
         }
     }
