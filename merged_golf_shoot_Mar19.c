@@ -232,9 +232,13 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
  */
 void draw_ball(int x, int y, short int color)
 {
-    for (int i = 0; i < BALL_SIZE; i++) {
-        for (int j = 0; j < BALL_SIZE; j++) {
-            plot_pixel(x + i, y + j, color);
+    //just draw the ball whose center is at (x,y) 
+    //and the radius is BALL_SIZE
+    for (int i = x - BALL_SIZE; i < x + BALL_SIZE; i++) {
+        for (int j = y - BALL_SIZE; j < y + BALL_SIZE; j++) {
+            if ((i - x) * (i - x) + (j - y) * (j - y) < BALL_SIZE * BALL_SIZE) {
+                plot_pixel(i, j, color);
+            }
         }
     }
 }
