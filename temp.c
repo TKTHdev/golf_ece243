@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdio.h> // Fixed: incorrect header name <stdout.h> -> <stdio.h>
+#include <stdio.h>
 
 /* Hardware Addresses */
 #define HEX3_HEX0_BASE  0xFF200020  // 7-segment display HEX3 - HEX0
@@ -11,30 +11,13 @@
 #define LED_BASE        0xFF200000  // LEDs
 #define PIXEL_BUF_CTRL  0xFF203020  // Pixel buffer controller
 
-
-#define COUNTDOWN_START 5
-#define TIMER_X (SCREEN_WIDTH - 20) // top right corner
-#define TIMER_Y 10
-#define ATTEMPTS_X (SCREEN_WIDTH - 20) // bottom right corner
-#define ATTEMPTS_Y (SCREEN_HEIGHT - 20) 
-#define VGA_BASE  0xFF203020  // vga 
-#define TIMER2_BASE 0xFF202020  // timer 2 
-
-
-// timer variables
-volatile int countdown = COUNTDOWN_START; // Countdown from 5 to o every second
-volatile int attempts = COUNTDOWN_START; // 5 attempts
-
-
-
-
 /* Game Settings */
 #define MAX_PLAYER      1           // Maximum number of players (reduced from 4 to 1)
 #define BALL_SIZE       4           // Ball size (radius) - changed from 12 to 4
 #define SCREEN_WIDTH    320         // Screen width
 #define SCREEN_HEIGHT   240         // Screen height
 
-
+// Bitmap data declaration (actual data omitted for brevity)
 // 'pixilart-drawing', 320x240px
 const unsigned char bitmap []  = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -640,7 +623,6 @@ const unsigned char bitmap []  = {
 };
 
 
-
 /* 7-segment display patterns for digits */
 const uint8_t SEVEN_SEG[10] = {
     0x3F, // 0: 0b00111111
@@ -661,8 +643,8 @@ typedef struct {
     int y;          // Y position
     int radius;     // Radius
     int color;      // Color
-    int dx;         // X velocity
-    int dy;         // Y velocity
+    float dx;       // X velocity (changed to float for smoother physics)
+    float dy;       // Y velocity (changed to float for smoother physics)
     int isActive;   // Active flag
     int momentum;   // Momentum (power)
 } Ball;
@@ -698,21 +680,14 @@ void plot_pixel(int x, int y, short int line_color);
 void draw_line(int x0, int y0, int x1, int y1, short int line_color);
 void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short int arrow_color);
 void draw_ball(int x, int y, short int color);
+void draw_fullscreen_bitmap(const unsigned char* bitmap, short int fg_color, short int bg_color);
 int wait_for_vsync();
-
-void draw_digit(int x, int y, int digit, short int color);
-void draw_number(int x, int y, int number, short int color);
-void config_timer2();
-
-void draw_attempts(int x, int y, int number, short int number_color, short int border_color);
-void clear_attempts_area(); 
-
-
-
 
 // Game mechanics
 void move_ball(int player);
 void shoot_the_ball(int player, int momentum, double angle);
+int is_black_pixel(int x, int y);
+int handle_bitmap_collision(Ball* ball);
 
 // Hardware interface
 void display_count(int value);
@@ -723,204 +698,110 @@ void config_timer();
 // Interrupt handler
 void __attribute__((interrupt)) interrupt_handler();
 
-
-
-void config_timer2() {
-    volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
-    int delay = 100000000;  // 1s at 100 MHz
-    timer[2] = delay & 0xFFFF; // low 16 bits
-    timer[3] = (delay >> 16) & 0xFFFF; // high 16 bits
-    timer[1] = 7;  // 0111- START, CONT, ITO 
-}
-
-
-void clear_attempts_area() {
-    int x, y;
-    for (x = ATTEMPTS_X - 9; x < ATTEMPTS_X + 25; x++) {  // + 2 pixels padding
-        for (y = ATTEMPTS_Y - 9; y < ATTEMPTS_Y + 29; y++) {  // 28 + 2 pixels padding
-            if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-                plot_pixel(x, y, 0x0000);
-            }
-        }
+/**
+ * Check if a pixel at (x,y) is black in the bitmap
+ * @param x X coordinate to check
+ * @param y Y coordinate to check
+ * @return 1 if black (obstacle), 0 if not
+ */
+int is_black_pixel(int x, int y) {
+    // Treat out-of-bounds as black pixels (obstacles)
+    if (x < 0 || x >= SCREEN_WIDTH || y < 0 || y >= SCREEN_HEIGHT) {
+        return 1;
     }
-}
 
-void draw_attempts(int x, int y, int number, short int number_color, short int border_color) {
-    // Rectangle border around number 
-    draw_line(x - 9, y - 9, x + 14, y - 9, border_color);  // top - 23 pixels 
-    draw_line(x - 9, y + 18, x + 14, y + 18, border_color);  // ^ bottom
-    draw_line(x - 9, y - 9, x - 9, y + 18, border_color);  // left - 27 
-    draw_line(x + 14, y - 9, x + 14, y + 18, border_color);  // ^ right 
+    // Calculate byte and bit positions in the bitmap
+    int bytes_per_row = (SCREEN_WIDTH + 7) / 8;
+    int byte_index = y * bytes_per_row + (x / 8);
+    int bit_index = 7 - (x % 8); // MSB first format
     
-    // Draw the number of attempts left 
-    draw_number(x - 1, y - 1, number, number_color); 
-}
-
-
-void draw_fullscreen_bitmap(const unsigned char* bitmap, short int fg_color, short int bg_color) {
-    // 画面全体のサイズを使用（320x240ピクセル）
-    int width = SCREEN_WIDTH;
-    int height = SCREEN_HEIGHT;
-    
-    // 1行あたりのバイト数を計算（幅 / 8、切り上げ）
-    int bytes_per_row = (width + 7) / 8;
-    
-    // 各ピクセルを描画
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            // バイト位置とビット位置を計算
-            int byte_index = y * bytes_per_row + (x / 8);
-            int bit_index = 7 - (x % 8); // MSBファースト（左端のピクセルが最上位ビット）
-            
-            // ビットマップの配列の範囲内かチェック
-            if (byte_index < (height * bytes_per_row)) {
-                // ピクセル値を取得（0か1）
-                unsigned char pixel = (bitmap[byte_index] >> bit_index) & 0x01;
-				
-				if(pixel ==0)continue;
-                
-                // ピクセルの色を決定
-                short int pixel_color = pixel ? fg_color : bg_color;
-                
-                // ピクセルを描画
-                plot_pixel(x, y, pixel_color);
-            }
-        }
+    // Check if we're in bitmap bounds
+    if (byte_index < (SCREEN_HEIGHT * bytes_per_row)) {
+        // Return inverse of bit value (1 for black, 0 for white)
+        return !((bitmap[byte_index] >> bit_index) & 0x01);
     }
+    
+    return 1; // Default to black for safety
 }
-
-
-
 
 /**
- * Main function
+ * Detect collision with bitmap and calculate proper reflection
+ * @param ball Pointer to the ball structure
+ * @return 1 if collision occurred, 0 otherwise
  */
-int main(void)
-{
-	volatile int * pixel_ctrl_ptr = (int *)VGA_BASE;
+int handle_bitmap_collision(Ball* ball) {
+    // Safety check
+    if (!ball || !ball->isActive) return 0;
     
-    unsigned int mstatus_value = 8;  // MIE bit = 1
-    unsigned int mie_value = 0x430000;  // Timer2 interrupt - IRQ 17, 16, and 22
-    unsigned int mtvec_value = (unsigned int)&interrupt_handler;
-
-
-
-    // Get pixel buffer controller address
-    volatile int *pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
+    int collision = 0;
+    int radius = ball->radius;
+    int x = ball->x;
+    int y = ball->y;
+    float dx = ball->dx;
+    float dy = ball->dy;
     
-    /* Initialize double buffering */
-    // Set front pixel buffer to Buffer 1
-    *(pixel_ctrl_ptr + 1) = (int)Buffer1;
+    // Check more points around the circumference for more accurate detection
+    // Check 16 points instead of 8 for better coverage
+    int collision_points[16][2] = {0}; // Store collision points
+    int collision_count = 0;
     
-    // Swap front/back buffers
-    wait_for_vsync();
-    
-    // Initialize pixel buffer pointer
-    pixel_buffer_start = *pixel_ctrl_ptr;
-    clear_screen();
-    
-    // Set back pixel buffer to Buffer 2
-    *(pixel_ctrl_ptr + 1) = (int)Buffer2;
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-    clear_screen();
-
-
-
-    
-    // Initialize direction and angle
-    cos_val = 1.0;
-    sin_val = 0.0;
-    angle = 0.0;             // 初期化する変数はグローバルになったのでここでは再宣言なし
-    angle_increment = 0.05;  // 初期化する変数はグローバルになったのでここでは再宣言なし
-
-    // Initialize the single ball (MAX_PLAYER is now 1)
-    for (int i = 0; i < MAX_PLAYER; i++) {
-        balls[i].x = BALL_SIZE + 2;    // Start position
-        balls[i].y = 120;              // Middle of screen vertically
-        balls[i].radius = BALL_SIZE;   // Set radius
-        balls[i].color = 0x6666;       // Color - gray/blue
-        balls[i].isActive = 0;         // Initially inactive
-        balls[i].dx = 0;               // Initial velocity
-        balls[i].dy = 0;
-        balls[i].momentum = 0;
-    }
-
-
-
-    // Reset display and LEDs
-    volatile unsigned int* hex3_hex0 = (volatile unsigned int*)HEX3_HEX0_BASE;
-    volatile unsigned int* hex5_hex4 = (volatile unsigned int*)HEX5_HEX4_BASE;
-    volatile unsigned int* leds = (volatile unsigned int*)LED_BASE;
-    *hex3_hex0 = 0; 
-    *hex5_hex4 = 0;
-    *leds = 0;
-    
-    // Configure hardware
-    config_timer();
-	config_timer2();
-    config_ps2();
-    
-    // Set up interrupt registers using inline assembly
-    __asm__ volatile ("csrw mstatus, %0" :: "r"(mstatus_value));
-    __asm__ volatile ("csrw mie, %0" :: "r"(mie_value));
-    __asm__ volatile ("csrw mtvec, %0" :: "r"(mtvec_value));
-
-    // Display initial count
-    display_count(count);
-    
-    /* Main game loop */
-    while (1) {
-        // Clear screen for new frame
-        clear_screen();
-        draw_fullscreen_bitmap(bitmap, 0xFFFF, 0x0000);
-
-        // Reset angle when it completes a full circle
-        if (angle >= 6.28) { // 2π radians
-            angle = 0.0;
-        }
+    for (int angle = 0; angle < 360; angle += 22) { // ~16 points
+        float rad = angle * 3.14159f / 180.0f;
+        int check_x = x + radius * cosf(rad);
+        int check_y = y + radius * sinf(rad);
         
-        // Handle spacebar input for shooting - only once
-        if (spacebar_pressed && balls[0].momentum == 0 && !button_used) {
-            // Only shoot if ball is not already in motion and button hasn't been used
-            shoot_the_ball(0, count, angle);
-            spacebar_pressed = 0; // Reset spacebar flag after shooting
-            button_used = 1;      // Mark button as used
+        if (is_black_pixel(check_x, check_y)) {
+            // Store collision point
+            collision_points[collision_count][0] = check_x - x; // Vector from center to collision point (x)
+            collision_points[collision_count][1] = check_y - y; // Vector from center to collision point (y)
+            collision_count++;
+            collision = 1;
         }
-
-        // Update and draw active balls
-        for (int i = 0; i < MAX_PLAYER; i++) {
-            if (balls[i].isActive == 1) {
-                move_ball(i);
-                draw_ball(balls[i].x, balls[i].y, balls[i].color);
+    }
+    
+    // If collision occurred, calculate proper reflection
+    if (collision) {
+        // If we have multiple collision points, average the normals
+        if (collision_count > 0) {
+            float normal_x = 0, normal_y = 0;
+            
+            // Sum up all collision normals
+            for (int i = 0; i < collision_count; i++) {
+                // Normalize each vector to create a unit normal
+                float len = sqrtf(collision_points[i][0]*collision_points[i][0] + 
+                                 collision_points[i][1]*collision_points[i][1]);
+                if (len > 0) {
+                    normal_x += collision_points[i][0] / len;
+                    normal_y += collision_points[i][1] / len;
+                }
+            }
+            
+            // Normalize the average normal
+            float normal_len = sqrtf(normal_x*normal_x + normal_y*normal_y);
+            if (normal_len > 0) {
+                normal_x /= normal_len;
+                normal_y /= normal_len;
+                
+                // Calculate dot product of velocity and normal
+                float dot_product = dx * normal_x + dy * normal_y;
+                
+                // Calculate reflection vector: v' = v - 2(v·n)n
+                ball->dx = dx - 2 * dot_product * normal_x;
+                ball->dy = dy - 2 * dot_product * normal_y;
+                
+                // Apply slight position correction to prevent getting stuck
+                ball->x -= normal_x * 2; // Move slightly away from the collision
+                ball->y -= normal_y * 2;
+                
+                // Add slight velocity loss for realism
+                ball->dx *= 0.9f;
+                ball->dy *= 0.9f;
             }
         }
-        
-        // Calculate direction vector components
-        cos_val = cosf(angle);
-        sin_val = sinf(angle);
-        
-        // Draw the direction arrow
-        draw_arrow(0, 120, cos_val, sin_val, 0xF800); // Red arrow
-        
-		clear_timer_area();
-        clear_attempts_area();
-        draw_number(TIMER_X, TIMER_Y, countdown, 0xFFFF);  // countdown top right corner, in white 
-        draw_attempts(ATTEMPTS_X, ATTEMPTS_Y, attempts, 0xFFFF, 0x07E0);  // bottom right corner, white # green border 
-
-        // Swap buffers and wait for VSync
-        wait_for_vsync();
-
-
-
-
-        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // Update back buffer pointer
-
-		if (countdown == 0 && attempts > 0) {
-            attempts--;
-            countdown = COUNTDOWN_START;  // Reset countdown
-        }
-
+        return 1;
     }
+    
+    return 0;
 }
 
 /**
@@ -1104,13 +985,40 @@ void plot_pixel(int x, int y, short int line_color)
     }
 }
 
-
-void clear_timer_area() {
-    int x, y;
-    for (x = TIMER_X - 2; x < TIMER_X + 12; x++) {  // 8 pixels wide + some padding
-        for (y = TIMER_Y - 2; y < TIMER_Y + 14; y++) {  // 12 pixels tall + some padding
-            if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-                plot_pixel(x, y, 0x0000);  // Black color
+/**
+ * Draw the bitmap on the screen
+ * @param bitmap Bitmap data array
+ * @param fg_color Foreground color
+ * @param bg_color Background color
+ */
+void draw_fullscreen_bitmap(const unsigned char* bitmap, short int fg_color, short int bg_color) {
+    // Screen size (320x240 pixels)
+    int width = SCREEN_WIDTH;
+    int height = SCREEN_HEIGHT;
+    
+    // Calculate bytes per row (width / 8, rounded up)
+    int bytes_per_row = (width + 7) / 8;
+    
+    // Draw each pixel
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            // Calculate byte position and bit position
+            int byte_index = y * bytes_per_row + (x / 8);
+            int bit_index = 7 - (x % 8); // MSB first (leftmost pixel is highest bit)
+            
+            // Check if within bitmap array bounds
+            if (byte_index < (height * bytes_per_row)) {
+                // Get pixel value (0 or 1)
+                unsigned char pixel = (bitmap[byte_index] >> bit_index) & 0x01;
+                
+                // Skip black pixels (0) for better performance
+                if (pixel == 0) continue;
+                
+                // Determine pixel color
+                short int pixel_color = pixel ? fg_color : bg_color;
+                
+                // Draw the pixel
+                plot_pixel(x, y, pixel_color);
             }
         }
     }
@@ -1131,26 +1039,23 @@ void shoot_the_ball(int player, int momentum, double angle)
     balls[player].x = BALL_SIZE + 2; // Fixed starting X
     balls[player].y = 120;           // Fixed starting Y (middle of screen) 
     
-    // Calculate velocity components from angle
-    float speed_factor = 2.0 + (momentum / 20.0); // Reduce speed slightly
+    // Calculate velocity components from angle and momentum
+    // Adjust speed_factor for better gameplay feel
+    float speed_factor = 1.5f + (momentum / 25.0f); // Reduced factor for more control
     
     // Set exact velocity values based on angle
     balls[player].dx = cosf(angle) * speed_factor;
     balls[player].dy = sinf(angle) * speed_factor;
     
     // Set momentum proportional to shot power
-    balls[player].momentum = momentum;
+    balls[player].momentum = momentum * 2; // Double momentum for longer travel
     
     // Ensure ball is active
     balls[player].isActive = 1;
-    
-    // Print debug info - remove in production
-    // printf("Ball shot: pos=(%d,%d), vel=(%f,%f), momentum=%d\n", 
-    //    balls[player].x, balls[player].y, balls[player].dx, balls[player].dy, momentum);
 }
 
 /**
- * Update ball position and handle collisions
+ * Update ball position and handle all collisions
  * @param player Player ID
  */
 void move_ball(int player)
@@ -1162,47 +1067,83 @@ void move_ball(int player)
     if (balls[player].momentum <= 0) {
         balls[player].dx = 0;
         balls[player].dy = 0;
-        
+        balls[player].isActive = 0; // Properly deactivate the ball
         return;
     }
 
     // Decrement momentum
     balls[player].momentum--;
 
-    // Store current position before moving
+    // Store current position
     int old_x = balls[player].x;
     int old_y = balls[player].y;
     
-    // Calculate new position
-    int new_x = old_x + (int)balls[player].dx;
-    int new_y = old_y + (int)balls[player].dy;
+    // Move in smaller increments for better collision detection
+    const int steps = 4; // Divide movement into steps
+    float step_dx = balls[player].dx / steps;
+    float step_dy = balls[player].dy / steps;
     
-    // Check boundary collisions and adjust position if needed
-    if (new_x < BALL_SIZE) {
-        // Left wall collision
-        new_x = BALL_SIZE;
-        balls[player].dx = -balls[player].dx;
-    }
-    else if (new_x > SCREEN_WIDTH - BALL_SIZE) {
-        // Right wall collision
-        new_x = SCREEN_WIDTH - BALL_SIZE;
-        balls[player].dx = -balls[player].dx;
+    int collision_occurred = 0;
+    
+    // Process movement in smaller increments
+    for (int step = 0; step < steps && balls[player].isActive; step++) {
+        // Calculate new position for this step
+        balls[player].x += step_dx;
+        balls[player].y += step_dy;
+        
+        // Check bitmap collision first
+        if (handle_bitmap_collision(&balls[player])) {
+            collision_occurred = 1;
+            continue; // Skip to next step after handling collision
+        }
+        
+        // Check boundary collisions
+        if (balls[player].x < balls[player].radius) {
+            // Left wall collision
+            balls[player].x = balls[player].radius;
+            balls[player].dx = -balls[player].dx * 0.9f; // Add slight energy loss
+            collision_occurred = 1;
+        }
+        else if (balls[player].x > SCREEN_WIDTH - balls[player].radius) {
+            // Right wall collision
+            balls[player].x = SCREEN_WIDTH - balls[player].radius;
+            balls[player].dx = -balls[player].dx * 0.9f;
+            collision_occurred = 1;
+        }
+        
+        if (balls[player].y < balls[player].radius) {
+            // Top wall collision
+            balls[player].y = balls[player].radius;
+            balls[player].dy = -balls[player].dy * 0.9f;
+            collision_occurred = 1;
+        }
+        else if (balls[player].y > SCREEN_HEIGHT - balls[player].radius) {
+            // Bottom wall collision
+            balls[player].y = SCREEN_HEIGHT - balls[player].radius;
+            balls[player].dy = -balls[player].dy * 0.9f;
+            collision_occurred = 1;
+        }
     }
     
-    if (new_y < BALL_SIZE) {
-        // Top wall collision
-        new_y = BALL_SIZE;
-        balls[player].dy = -balls[player].dy;
-    }
-    else if (new_y > SCREEN_HEIGHT - BALL_SIZE) {
-        // Bottom wall collision
-        new_y = SCREEN_HEIGHT - BALL_SIZE;
-        balls[player].dy = -balls[player].dy;
+    // If a collision occurred, apply slight additional momentum loss
+    if (collision_occurred) {
+        balls[player].momentum -= 2; // Lose extra momentum on collision
+        if (balls[player].momentum < 0) balls[player].momentum = 0;
     }
     
-    // Update ball position
-    balls[player].x = new_x;
-    balls[player].y = new_y;
+    // Add slight velocity damping over time for realism
+    if (balls[player].isActive) {
+        balls[player].dx *= 0.99f;
+        balls[player].dy *= 0.99f;
+        
+        // Stop ball if it's moving too slowly
+        float speed_squared = balls[player].dx * balls[player].dx + balls[player].dy * balls[player].dy;
+        if (speed_squared < 0.01f && balls[player].momentum < 10) {
+            balls[player].dx = 0;
+            balls[player].dy = 0;
+            balls[player].momentum = 0;
+        }
+    }
 }
 
 /**
@@ -1290,15 +1231,6 @@ void __attribute__((interrupt)) interrupt_handler()
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause));
     mcause = mcause & 0x7FFFFFFF; // Mask MSB (interrupt vs exception bit)
 
-	if (mcause == 17) { // Timer2 interrupt
-        if (countdown > 0) {  // Decrement until 0
-            countdown--;
-        }
-        volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
-        timer[0] = 1;  // clear interrupt
-    }
-
-
     if (mcause == 16) { // Timer interrupt
         if (run) { // If counter is running
             count = count + 1;
@@ -1373,49 +1305,112 @@ void __attribute__((interrupt)) interrupt_handler()
     }
 }
 
+/**
+ * Main function
+ */
+int main(void)
+{
+    // Get pixel buffer controller address
+    volatile int *pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
+    
+    /* Initialize double buffering */
+    // Set front pixel buffer to Buffer 1
+    *(pixel_ctrl_ptr + 1) = (int)Buffer1;
+    
+    // Swap front/back buffers
+    wait_for_vsync();
+    
+    // Initialize pixel buffer pointer
+    pixel_buffer_start = *pixel_ctrl_ptr;
+    clear_screen();
+    
+    // Set back pixel buffer to Buffer 2
+    *(pixel_ctrl_ptr + 1) = (int)Buffer2;
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+    clear_screen();
+    
+    // Initialize direction and angle
+    cos_val = 1.0;
+    sin_val = 0.0;
+    angle = 0.0;
+    angle_increment = 0.05;
 
-
-void draw_digit(int x, int y, int digit, short int color) {
-    switch(digit) {
-        case 5:
-            draw_line(x, y, x+8, y, color);  // top horizontal 
-            draw_line(x, y, x, y+6, color);  // left vertical line 
-            draw_line(x, y+6, x+8, y+6, color);  // middle horizontal 
-            draw_line(x+8, y+6, x+8, y+12, color); // right vertical 
-            draw_line(x, y+12, x+8, y+12, color);  // bottom line
-            break;
-        case 4:
-            draw_line(x, y, x, y+6, color);  // left vertical 
-            draw_line(x, y+6, x+8, y+6, color); // middle horizontal 
-            draw_line(x+8, y, x+8, y+12, color);  // right vertical 
-            break;
-        case 3:
-            draw_line(x, y, x+8, y, color); // top horizontal 
-            draw_line(x+8, y, x+8, y+12, color);  // right vertical 
-            draw_line(x, y+6, x+8, y+6, color); // middle horizontal 
-            draw_line(x, y+12, x+8, y+12, color); // bottom horizontal 
-            break;
-        case 2:
-            draw_line(x, y, x+8, y, color);  // top horizontal
-            draw_line(x+8, y, x+8, y+6, color);  // right vertical 
-            draw_line(x, y+6, x+8, y+6, color); // middle horizontal 
-            draw_line(x, y+6, x, y+12, color); // left vertical 
-            draw_line(x, y+12, x+8, y+12, color); // bottom horizontal 
-            break;
-        case 1:
-            draw_line(x+4, y, x+4, y+12, color); //line 
-            break;
-        case 0:
-            draw_line(x, y, x+8, y, color); // top line
-            draw_line(x, y, x, y+12, color); // left vertical 
-            draw_line(x+8, y, x+8, y+12, color);  // right vertical
-            draw_line(x, y+12, x+8, y+12, color); // bottom line
-            break;
+    // Initialize the single ball (MAX_PLAYER is now 1)
+    for (int i = 0; i < MAX_PLAYER; i++) {
+        balls[i].x = BALL_SIZE + 2;    // Start position
+        balls[i].y = 120;              // Middle of screen vertically
+        balls[i].radius = BALL_SIZE;   // Set radius
+        balls[i].color = 0x6666;       // Color - gray/blue
+        balls[i].isActive = 0;         // Initially inactive
+        balls[i].dx = 0;               // Initial velocity
+        balls[i].dy = 0;
+        balls[i].momentum = 0;
     }
-}
 
-void draw_number(int x, int y, int number, short int color) {
-    if (number >= 0 && number <= 5) {
-        draw_digit(x, y, number, color);
+    /* Initialize hardware and interrupts */
+    // Set up interrupt control registers
+    unsigned int mstatus_value = 8;             // Enable global interrupts (mie bit = 1)
+    unsigned int mie_value = 0x410000;          // Enable timer (bit 16) and PS2 (bit 22) interrupts
+    unsigned int mtvec_value = (unsigned int)&interrupt_handler;
+
+    // Reset display and LEDs
+    volatile unsigned int* hex3_hex0 = (volatile unsigned int*)HEX3_HEX0_BASE;
+    volatile unsigned int* hex5_hex4 = (volatile unsigned int*)HEX5_HEX4_BASE;
+    volatile unsigned int* leds = (volatile unsigned int*)LED_BASE;
+    *hex3_hex0 = 0; 
+    *hex5_hex4 = 0;
+    *leds = 0;
+    
+    // Configure hardware
+    config_timer();
+    config_ps2();
+    
+    // Set up interrupt registers using inline assembly
+    __asm__ volatile ("csrw mstatus, %0" :: "r"(mstatus_value));
+    __asm__ volatile ("csrw mie, %0" :: "r"(mie_value));
+    __asm__ volatile ("csrw mtvec, %0" :: "r"(mtvec_value));
+
+    // Display initial count
+    display_count(count);
+    
+    /* Main game loop */
+    while (1) {
+        // Clear screen for new frame
+        clear_screen();
+        draw_fullscreen_bitmap(bitmap, 0xFFFF, 0x0000);
+
+        // Reset angle when it completes a full circle
+        if (angle >= 6.28) { // 2π radians
+            angle = 0.0;
+        }
+        
+        // Handle spacebar input for shooting - only once
+        if (spacebar_pressed && balls[0].momentum == 0 && !button_used) {
+            // Only shoot if ball is not already in motion and button hasn't been used
+            shoot_the_ball(0, count, angle);
+            spacebar_pressed = 0; // Reset spacebar flag after shooting
+            button_used = 1;      // Mark button as used
+        }
+
+        // Update and draw active balls
+        for (int i = 0; i < MAX_PLAYER; i++) {
+            if (balls[i].isActive == 1) {
+                move_ball(i);
+                draw_ball(balls[i].x, balls[i].y, balls[i].color);
+            }
+        }
+        
+        // Calculate direction vector components
+        cos_val = cosf(angle);
+        sin_val = sinf(angle);
+        
+        // Draw the direction arrow
+        draw_arrow(0, 120, cos_val, sin_val, 0xF800); // Red arrow
+        
+        // Swap buffers and wait for VSync
+        wait_for_vsync();
+        pixel_buffer_start = *(pixel_ctrl_ptr + 1); // Update back buffer pointer
     }
+    
+    return 0; // Never reached
 }

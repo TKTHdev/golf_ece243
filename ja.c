@@ -11,23 +11,6 @@
 #define LED_BASE        0xFF200000  // LEDs
 #define PIXEL_BUF_CTRL  0xFF203020  // Pixel buffer controller
 
-
-#define COUNTDOWN_START 5
-#define TIMER_X (SCREEN_WIDTH - 20) // top right corner
-#define TIMER_Y 10
-#define ATTEMPTS_X (SCREEN_WIDTH - 20) // bottom right corner
-#define ATTEMPTS_Y (SCREEN_HEIGHT - 20) 
-#define VGA_BASE  0xFF203020  // vga 
-#define TIMER2_BASE 0xFF202020  // timer 2 
-
-
-// timer variables
-volatile int countdown = COUNTDOWN_START; // Countdown from 5 to o every second
-volatile int attempts = COUNTDOWN_START; // 5 attempts
-
-
-
-
 /* Game Settings */
 #define MAX_PLAYER      1           // Maximum number of players (reduced from 4 to 1)
 #define BALL_SIZE       4           // Ball size (radius) - changed from 12 to 4
@@ -700,16 +683,6 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
 void draw_ball(int x, int y, short int color);
 int wait_for_vsync();
 
-void draw_digit(int x, int y, int digit, short int color);
-void draw_number(int x, int y, int number, short int color);
-void config_timer2();
-
-void draw_attempts(int x, int y, int number, short int number_color, short int border_color);
-void clear_attempts_area(); 
-
-
-
-
 // Game mechanics
 void move_ball(int player);
 void shoot_the_ball(int player, int momentum, double angle);
@@ -722,39 +695,6 @@ void config_timer();
 
 // Interrupt handler
 void __attribute__((interrupt)) interrupt_handler();
-
-
-
-void config_timer2() {
-    volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
-    int delay = 100000000;  // 1s at 100 MHz
-    timer[2] = delay & 0xFFFF; // low 16 bits
-    timer[3] = (delay >> 16) & 0xFFFF; // high 16 bits
-    timer[1] = 7;  // 0111- START, CONT, ITO 
-}
-
-
-void clear_attempts_area() {
-    int x, y;
-    for (x = ATTEMPTS_X - 9; x < ATTEMPTS_X + 25; x++) {  // + 2 pixels padding
-        for (y = ATTEMPTS_Y - 9; y < ATTEMPTS_Y + 29; y++) {  // 28 + 2 pixels padding
-            if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-                plot_pixel(x, y, 0x0000);
-            }
-        }
-    }
-}
-
-void draw_attempts(int x, int y, int number, short int number_color, short int border_color) {
-    // Rectangle border around number 
-    draw_line(x - 9, y - 9, x + 14, y - 9, border_color);  // top - 23 pixels 
-    draw_line(x - 9, y + 18, x + 14, y + 18, border_color);  // ^ bottom
-    draw_line(x - 9, y - 9, x - 9, y + 18, border_color);  // left - 27 
-    draw_line(x + 14, y - 9, x + 14, y + 18, border_color);  // ^ right 
-    
-    // Draw the number of attempts left 
-    draw_number(x - 1, y - 1, number, number_color); 
-}
 
 
 void draw_fullscreen_bitmap(const unsigned char* bitmap, short int fg_color, short int bg_color) {
@@ -797,14 +737,6 @@ void draw_fullscreen_bitmap(const unsigned char* bitmap, short int fg_color, sho
  */
 int main(void)
 {
-	volatile int * pixel_ctrl_ptr = (int *)VGA_BASE;
-    
-    unsigned int mstatus_value = 8;  // MIE bit = 1
-    unsigned int mie_value = 0x430000;  // Timer2 interrupt - IRQ 17, 16, and 22
-    unsigned int mtvec_value = (unsigned int)&interrupt_handler;
-
-
-
     // Get pixel buffer controller address
     volatile int *pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
     
@@ -823,9 +755,6 @@ int main(void)
     *(pixel_ctrl_ptr + 1) = (int)Buffer2;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     clear_screen();
-
-
-
     
     // Initialize direction and angle
     cos_val = 1.0;
@@ -845,7 +774,11 @@ int main(void)
         balls[i].momentum = 0;
     }
 
-
+    /* Initialize hardware and interrupts */
+    // Set up interrupt control registers
+    unsigned int mstatus_value = 8;             // Enable global interrupts (mie bit = 1)
+    unsigned int mie_value = 0x410000;          // Enable timer (bit 16) and PS2 (bit 22) interrupts
+    unsigned int mtvec_value = (unsigned int)&interrupt_handler;
 
     // Reset display and LEDs
     volatile unsigned int* hex3_hex0 = (volatile unsigned int*)HEX3_HEX0_BASE;
@@ -857,7 +790,6 @@ int main(void)
     
     // Configure hardware
     config_timer();
-	config_timer2();
     config_ps2();
     
     // Set up interrupt registers using inline assembly
@@ -902,24 +834,9 @@ int main(void)
         // Draw the direction arrow
         draw_arrow(0, 120, cos_val, sin_val, 0xF800); // Red arrow
         
-		clear_timer_area();
-        clear_attempts_area();
-        draw_number(TIMER_X, TIMER_Y, countdown, 0xFFFF);  // countdown top right corner, in white 
-        draw_attempts(ATTEMPTS_X, ATTEMPTS_Y, attempts, 0xFFFF, 0x07E0);  // bottom right corner, white # green border 
-
         // Swap buffers and wait for VSync
         wait_for_vsync();
-
-
-
-
         pixel_buffer_start = *(pixel_ctrl_ptr + 1); // Update back buffer pointer
-
-		if (countdown == 0 && attempts > 0) {
-            attempts--;
-            countdown = COUNTDOWN_START;  // Reset countdown
-        }
-
     }
 }
 
@@ -1104,18 +1021,6 @@ void plot_pixel(int x, int y, short int line_color)
     }
 }
 
-
-void clear_timer_area() {
-    int x, y;
-    for (x = TIMER_X - 2; x < TIMER_X + 12; x++) {  // 8 pixels wide + some padding
-        for (y = TIMER_Y - 2; y < TIMER_Y + 14; y++) {  // 12 pixels tall + some padding
-            if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-                plot_pixel(x, y, 0x0000);  // Black color
-            }
-        }
-    }
-}
-
 /**
  * Shoot a ball with specified momentum and angle
  * @param player Player ID
@@ -1290,15 +1195,6 @@ void __attribute__((interrupt)) interrupt_handler()
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause));
     mcause = mcause & 0x7FFFFFFF; // Mask MSB (interrupt vs exception bit)
 
-	if (mcause == 17) { // Timer2 interrupt
-        if (countdown > 0) {  // Decrement until 0
-            countdown--;
-        }
-        volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
-        timer[0] = 1;  // clear interrupt
-    }
-
-
     if (mcause == 16) { // Timer interrupt
         if (run) { // If counter is running
             count = count + 1;
@@ -1370,52 +1266,5 @@ void __attribute__((interrupt)) interrupt_handler()
         
         // Update LED states
         led_update();
-    }
-}
-
-
-
-void draw_digit(int x, int y, int digit, short int color) {
-    switch(digit) {
-        case 5:
-            draw_line(x, y, x+8, y, color);  // top horizontal 
-            draw_line(x, y, x, y+6, color);  // left vertical line 
-            draw_line(x, y+6, x+8, y+6, color);  // middle horizontal 
-            draw_line(x+8, y+6, x+8, y+12, color); // right vertical 
-            draw_line(x, y+12, x+8, y+12, color);  // bottom line
-            break;
-        case 4:
-            draw_line(x, y, x, y+6, color);  // left vertical 
-            draw_line(x, y+6, x+8, y+6, color); // middle horizontal 
-            draw_line(x+8, y, x+8, y+12, color);  // right vertical 
-            break;
-        case 3:
-            draw_line(x, y, x+8, y, color); // top horizontal 
-            draw_line(x+8, y, x+8, y+12, color);  // right vertical 
-            draw_line(x, y+6, x+8, y+6, color); // middle horizontal 
-            draw_line(x, y+12, x+8, y+12, color); // bottom horizontal 
-            break;
-        case 2:
-            draw_line(x, y, x+8, y, color);  // top horizontal
-            draw_line(x+8, y, x+8, y+6, color);  // right vertical 
-            draw_line(x, y+6, x+8, y+6, color); // middle horizontal 
-            draw_line(x, y+6, x, y+12, color); // left vertical 
-            draw_line(x, y+12, x+8, y+12, color); // bottom horizontal 
-            break;
-        case 1:
-            draw_line(x+4, y, x+4, y+12, color); //line 
-            break;
-        case 0:
-            draw_line(x, y, x+8, y, color); // top line
-            draw_line(x, y, x, y+12, color); // left vertical 
-            draw_line(x+8, y, x+8, y+12, color);  // right vertical
-            draw_line(x, y+12, x+8, y+12, color); // bottom line
-            break;
-    }
-}
-
-void draw_number(int x, int y, int number, short int color) {
-    if (number >= 0 && number <= 5) {
-        draw_digit(x, y, number, color);
     }
 }
