@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdio.h> // Fixed: incorrect header name <stdout.h> -> <stdio.h>
+#include <stdio.h>
 
 /* Hardware Addresses */
 #define HEX3_HEX0_BASE  0xFF200020  // 7-segment display HEX3 - HEX0
@@ -16,9 +16,9 @@
 #define BALL_SIZE       4           // Ball size (radius) - changed from 12 to 4
 #define SCREEN_WIDTH    320         // Screen width
 #define SCREEN_HEIGHT   240         // Screen height
+#define MAX_ARROW_POINTS 300        // Maximum points to track for arrow
 
-
-// 'pixilart-drawing', 320x240px
+// Background image bitmap
 const unsigned char bitmap []  = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
@@ -622,21 +622,16 @@ const unsigned char bitmap []  = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-
-
 /* 7-segment display patterns for digits */
 const uint8_t SEVEN_SEG[10] = {
-    0x3F, // 0: 0b00111111
-    0x06, // 1: 0b00000110
-    0x5B, // 2: 0b01011011
-    0x4F, // 3: 0b01001111
-    0x66, // 4: 0b01100110
-    0x6D, // 5: 0b01101101
-    0x7D, // 6: 0b01111101
-    0x07, // 7: 0b00000111
-    0x7F, // 8: 0b01111111
-    0x67  // 9: 0b01100111
+    0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x67
 };
+
+/* Point structure for arrow tracking */
+typedef struct {
+    int x;
+    int y;
+} Point;
 
 /* Ball structure */
 typedef struct {
@@ -648,6 +643,8 @@ typedef struct {
     int dy;         // Y velocity
     int isActive;   // Active flag
     int momentum;   // Momentum (power)
+    int prev_x;     // Previous X position for efficient redraw
+    int prev_y;     // Previous Y position for efficient redraw
 } Ball;
 
 /* Global variables */
@@ -671,17 +668,34 @@ volatile int button_used = 0;       // Flag to track if button has been used
 volatile float angle = 0.0;         // Current angle for arrow direction
 volatile float angle_increment = 0.05; // Angle change per frame
 
+// Arrow points tracking
+Point arrow_points[MAX_ARROW_POINTS];
+int arrow_point_count = 0;
+
+// Background flag - only draw background once at start
+volatile int background_drawn = 0;
+
 // Ball objects
 Ball balls[MAX_PLAYER];
 
 /* Function prototypes */
+// Arrow tracking functions
+void add_arrow_point(int x, int y);
+void clear_arrow_points();
+void restore_background_at_point(int x, int y);
+
 // Graphics functions
-void clear_screen();
+void clear_area(int x1, int y1, int x2, int y2);
 void plot_pixel(int x, int y, short int line_color);
 void draw_line(int x0, int y0, int x1, int y1, short int line_color);
+void draw_line_and_track(int x0, int y0, int x1, int y1, short int line_color);
 void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short int arrow_color);
-void draw_ball(int x, int y, short int color);
+void draw_ball(Ball* ball);
+void clear_ball(Ball* ball);
 int wait_for_vsync();
+
+// Background drawing - optimized to draw only once
+void draw_fullscreen_bitmap_once(const unsigned char* bitmap, short int fg_color, short int bg_color);
 
 // Game mechanics
 void move_ball(int player);
@@ -696,41 +710,60 @@ void config_timer();
 // Interrupt handler
 void __attribute__((interrupt)) interrupt_handler();
 
-
-void draw_fullscreen_bitmap(const unsigned char* bitmap, short int fg_color, short int bg_color) {
-    // 画面全体のサイズを使用（320x240ピクセル）
-    int width = SCREEN_WIDTH;
-    int height = SCREEN_HEIGHT;
-    
-    // 1行あたりのバイト数を計算（幅 / 8、切り上げ）
-    int bytes_per_row = (width + 7) / 8;
-    
-    // 各ピクセルを描画
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            // バイト位置とビット位置を計算
-            int byte_index = y * bytes_per_row + (x / 8);
-            int bit_index = 7 - (x % 8); // MSBファースト（左端のピクセルが最上位ビット）
-            
-            // ビットマップの配列の範囲内かチェック
-            if (byte_index < (height * bytes_per_row)) {
-                // ピクセル値を取得（0か1）
-                unsigned char pixel = (bitmap[byte_index] >> bit_index) & 0x01;
-				
-				if(pixel ==0)continue;
-                
-                // ピクセルの色を決定
-                short int pixel_color = pixel ? fg_color : bg_color;
-                
-                // ピクセルを描画
-                plot_pixel(x, y, pixel_color);
-            }
-        }
+/**
+ * Add a point to the arrow tracking array
+ */
+void add_arrow_point(int x, int y) {
+    if (arrow_point_count < MAX_ARROW_POINTS) {
+        arrow_points[arrow_point_count].x = x;
+        arrow_points[arrow_point_count].y = y;
+        arrow_point_count++;
     }
 }
 
+/**
+ * Clear all tracked arrow points and restore background
+ */
+void clear_arrow_points() {
+    for (int i = 0; i < arrow_point_count; i++) {
+        // Clear each tracked point
+        plot_pixel(arrow_points[i].x, arrow_points[i].y, 0x0000);  // Black
+        
+        // Optionally restore background at this point
+        restore_background_at_point(arrow_points[i].x, arrow_points[i].y);
+    }
+    arrow_point_count = 0;  // Reset counter
+}
 
-
+/**
+ * Restore background at a specific point
+ * This function reads the bitmap and restores the correct background pixel
+ */
+void restore_background_at_point(int x, int y) {
+    // Check bounds
+    if (x < 0 || x >= SCREEN_WIDTH || y < 0 || y >= SCREEN_HEIGHT) {
+        return;
+    }
+    
+    // Calculate position in bitmap
+    int bytes_per_row = (SCREEN_WIDTH + 7) / 8;
+    int byte_index = y * bytes_per_row + (x / 8);
+    int bit_index = 7 - (x % 8); // MSB first
+    
+    // Check if within bitmap bounds
+    if (byte_index < (SCREEN_HEIGHT * bytes_per_row)) {
+        // Get pixel value (0 or 1)
+        unsigned char pixel = (bitmap[byte_index] >> bit_index) & 0x01;
+        
+        if (pixel == 1) {
+            // Draw foreground color pixel
+            plot_pixel(x, y, 0xFFFF);  // White
+        } else {
+            // Draw background color pixel
+            plot_pixel(x, y, 0x0000);  // Black
+        }
+    }
+}
 
 /**
  * Main function
@@ -749,18 +782,21 @@ int main(void)
     
     // Initialize pixel buffer pointer
     pixel_buffer_start = *pixel_ctrl_ptr;
-    clear_screen();
+    clear_area(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1); // Clear entire screen initially
     
     // Set back pixel buffer to Buffer 2
     *(pixel_ctrl_ptr + 1) = (int)Buffer2;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-    clear_screen();
+    clear_area(0, 0, SCREEN_WIDTH-1, SCREEN_HEIGHT-1); // Clear entire screen initially
     
     // Initialize direction and angle
     cos_val = 1.0;
     sin_val = 0.0;
-    angle = 0.0;             // 初期化する変数はグローバルになったのでここでは再宣言なし
-    angle_increment = 0.05;  // 初期化する変数はグローバルになったのでここでは再宣言なし
+    angle = 0.0;
+    angle_increment = 0.05;
+
+    // Initialize arrow points
+    arrow_point_count = 0;
 
     // Initialize the single ball (MAX_PLAYER is now 1)
     for (int i = 0; i < MAX_PLAYER; i++) {
@@ -772,6 +808,8 @@ int main(void)
         balls[i].dx = 0;               // Initial velocity
         balls[i].dy = 0;
         balls[i].momentum = 0;
+        balls[i].prev_x = balls[i].x;  // Initialize previous position
+        balls[i].prev_y = balls[i].y;
     }
 
     /* Initialize hardware and interrupts */
@@ -802,10 +840,12 @@ int main(void)
     
     /* Main game loop */
     while (1) {
-        // Clear screen for new frame
-        clear_screen();
-        draw_fullscreen_bitmap(bitmap, 0xFFFF, 0x0000);
-
+        // Draw background only once
+        if (!background_drawn) {
+            draw_fullscreen_bitmap_once(bitmap, 0xFFFF, 0x0000);
+            background_drawn = 1;
+        }
+        
         // Reset angle when it completes a full circle
         if (angle >= 6.28) { // 2π radians
             angle = 0.0;
@@ -822,8 +862,14 @@ int main(void)
         // Update and draw active balls
         for (int i = 0; i < MAX_PLAYER; i++) {
             if (balls[i].isActive == 1) {
+                // Clear previous ball position first
+                clear_ball(&balls[i]);
+                
+                // Move the ball
                 move_ball(i);
-                draw_ball(balls[i].x, balls[i].y, balls[i].color);
+                
+                // Draw at new position
+                draw_ball(&balls[i]);
             }
         }
         
@@ -831,7 +877,7 @@ int main(void)
         cos_val = cosf(angle);
         sin_val = sinf(angle);
         
-        // Draw the direction arrow
+        // Draw the direction arrow (with tracking)
         draw_arrow(0, 120, cos_val, sin_val, 0xF800); // Red arrow
         
         // Swap buffers and wait for VSync
@@ -841,15 +887,13 @@ int main(void)
 }
 
 /**
- * Draw an arrow based on direction vector
- * @param center_x Starting X position
- * @param center_y Starting Y position
- * @param cos_val Cosine of direction angle
- * @param sin_val Sine of direction angle
- * @param arrow_color Arrow color
+ * Draw arrow based on direction vector with point tracking
  */
 void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short int arrow_color)
 {
+    // Clear previous arrow points first
+    clear_arrow_points();
+    
     // Arrow length - REDUCED FROM 80 to 50
     int arrow_length = 50;
     
@@ -857,8 +901,8 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
     int tip_x = center_x + (int)(cos_val * arrow_length);
     int tip_y = center_y + (int)(sin_val * arrow_length);
     
-    // Draw arrow shaft
-    draw_line(center_x, center_y, tip_x, tip_y, arrow_color);
+    // Draw arrow shaft with tracking
+    draw_line_and_track(center_x, center_y, tip_x, tip_y, arrow_color);
     
     // Draw arrowhead - REDUCED FROM 10 to 6
     int arrowhead_length = 6;
@@ -870,20 +914,80 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
     int head2_x = tip_x + (int)(cosf(angle2) * arrowhead_length);
     int head2_y = tip_y + (int)(sinf(angle2) * arrowhead_length);
     
-    draw_line(tip_x, tip_y, head1_x, head1_y, arrow_color);
-    draw_line(tip_x, tip_y, head2_x, head2_y, arrow_color);
+    // Draw arrowhead lines with tracking
+    draw_line_and_track(tip_x, tip_y, head1_x, head1_y, arrow_color);
+    draw_line_and_track(tip_x, tip_y, head2_x, head2_y, arrow_color);
+}
+
+/**
+ * Draw a line with point tracking
+ */
+void draw_line_and_track(int x0, int y0, int x1, int y1, short int line_color)
+{
+    // Determine if line is steep (greater y-difference than x-difference)
+    int is_steep = (abs(y1 - y0) > abs(x1 - x0));
+    
+    // If steep, swap x and y coordinates
+    if (is_steep) {
+        int temp = x0;
+        x0 = y0;
+        y0 = temp;
+        
+        temp = x1;
+        x1 = y1;
+        y1 = temp;
+    }
+    
+    // If line goes right to left, swap endpoints
+    if (x0 > x1) {
+        int temp = x0;
+        x0 = x1;
+        x1 = temp;
+        
+        temp = y0;
+        y0 = y1;
+        y1 = temp;
+    }
+    
+    // Calculate deltas and error term
+    int deltax = x1 - x0;
+    int deltay = abs(y1 - y0);
+    int error = -(deltax / 2);
+    int y = y0;
+    int y_step;
+    
+    // Determine y step direction
+    y_step = (y0 < y1) ? 1 : -1;
+    
+    // Draw the line pixel by pixel
+    for (int x = x0; x <= x1; x++) {
+        if (is_steep) {
+            plot_pixel(y, x, line_color);   // If steep, swap x and y
+            add_arrow_point(y, x);          // Track this point
+        } else {
+            plot_pixel(x, y, line_color);   // Otherwise use normal coordinates
+            add_arrow_point(x, y);          // Track this point
+        }
+        
+        // Update error and y-position
+        error = error + deltay;
+        if (error > 0) {
+            y = y + y_step;
+            error = error - deltax;
+        }
+    }
 }
 
 /**
  * Draw a filled ball
- * @param x X position (center)
- * @param y Y position (center)
- * @param color Ball color
  */
-void draw_ball(int x, int y, short int color)
+void draw_ball(Ball* ball)
 {
-    // Get radius for calculations
-    int radius = BALL_SIZE;
+    // Get radius and position
+    int radius = ball->radius;
+    int x = ball->x;
+    int y = ball->y;
+    short int color = ball->color;
     
     // Calculate drawing boundaries with bounds checking
     int left = x - radius;
@@ -897,26 +1001,164 @@ void draw_ball(int x, int y, short int color)
     if (top < 0) top = 0;
     if (bottom >= SCREEN_HEIGHT) bottom = SCREEN_HEIGHT - 1;
     
-    // Draw ball as a circle using a distance check for each pixel
-    // This creates a more rounded appearance than a simple square
-    for (int i = left; i <= right; i++) {
-        for (int j = top; j <= bottom; j++) {
-            // Calculate distance from center
+    // Pre-compute squared radius for comparison
+    int radius_squared = radius * radius;
+    
+    // Draw ball using a more efficient algorithm
+    for (int j = top; j <= bottom; j++) {
+        // Pre-calculate the Y offset squared once per row
+        int dy = j - y;
+        int dy_squared = dy * dy;
+        
+        for (int i = left; i <= right; i++) {
+            // Calculate X offset
             int dx = i - x;
-            int dy = j - y;
-            int distance_squared = dx*dx + dy*dy;
+            
+            // Calculate distance squared without sqrt
+            int distance_squared = dx*dx + dy_squared;
             
             // Only draw pixels within radius
-            if (distance_squared <= radius*radius) {
+            if (distance_squared <= radius_squared) {
                 plot_pixel(i, j, color);
+            }
+        }
+    }
+    
+    // Update previous position to current
+    ball->prev_x = x;
+    ball->prev_y = y;
+}
+
+/**
+ * Clear the area where a ball was previously drawn
+ */
+void clear_ball(Ball* ball)
+{
+    // Only clear if active and has moved
+    if (!ball->isActive || (ball->prev_x == ball->x && ball->prev_y == ball->y)) {
+        return;
+    }
+    
+    int radius = ball->radius;
+    int x = ball->prev_x;
+    int y = ball->prev_y;
+    
+    // Calculate the area to clear
+    int left = x - radius - 1; // Add 1 pixel margin
+    int right = x + radius + 1;
+    int top = y - radius - 1;
+    int bottom = y + radius + 1;
+    
+    // Clip to screen boundaries
+    if (left < 0) left = 0;
+    if (right >= SCREEN_WIDTH) right = SCREEN_WIDTH - 1;
+    if (top < 0) top = 0;
+    if (bottom >= SCREEN_HEIGHT) bottom = SCREEN_HEIGHT - 1;
+    
+    // Get the background color from the bitmap data at this position
+    // This is a simplification - for true transparency would need to redraw the bitmap
+    // For now, clear to black (0x0000) and let the bitmap redraw handle it
+    short int bg_color = 0x0000;
+    
+    // Clear the area using our redraw-background function
+    // In a real implementation, you'd restore the background from the bitmap
+    for (int j = top; j <= bottom; j++) {
+        for (int i = left; i <= right; i++) {
+            plot_pixel(i, j, bg_color);
+        }
+    }
+    
+    // Redraw background in this area
+    // For efficiency, here we'd use a function to draw just this part of the bitmap
+    int bytes_per_row = (SCREEN_WIDTH + 7) / 8;
+    for (int y = top; y <= bottom; y++) {
+        for (int x = left; x <= right; x++) {
+            // Calculate byte position and bit position
+            int byte_index = y * bytes_per_row + (x / 8);
+            int bit_index = 7 - (x % 8); // MSB first
+            
+            // Check if within bitmap array bounds
+            if (byte_index < (SCREEN_HEIGHT * bytes_per_row)) {
+                // Get pixel value (0 or 1)
+                unsigned char pixel = (bitmap[byte_index] >> bit_index) & 0x01;
+                
+                if (pixel == 1) {
+                    // Draw foreground color pixel
+                    plot_pixel(x, y, 0xFFFF);
+                }
             }
         }
     }
 }
 
 /**
- * Wait for VSync to synchronize with VGA controller
- * @return 0 on success
+ * Clear a specific rectangular area - much more efficient than clearing whole screen
+ */
+void clear_area(int x1, int y1, int x2, int y2)
+{
+    // Ensure coordinates are in bounds
+    if (x1 < 0) x1 = 0;
+    if (y1 < 0) y1 = 0;
+    if (x2 >= SCREEN_WIDTH) x2 = SCREEN_WIDTH - 1;
+    if (y2 >= SCREEN_HEIGHT) y2 = SCREEN_HEIGHT - 1;
+    
+    // Ensure x1 <= x2, y1 <= y2
+    if (x1 > x2) { int temp = x1; x1 = x2; x2 = temp; }
+    if (y1 > y2) { int temp = y1; y1 = y2; y2 = temp; }
+    
+    // Clear the specified area to black
+    for (int y = y1; y <= y2; y++) {
+        for (int x = x1; x <= x2; x++) {
+            plot_pixel(x, y, 0x0000); // Black
+        }
+    }
+}
+
+/**
+ * Draw bitmap once for better performance - after this, only redraw changed parts
+ */
+void draw_fullscreen_bitmap_once(const unsigned char* bitmap, short int fg_color, short int bg_color)
+{
+    // Screen size - use full dimensions
+    int width = SCREEN_WIDTH;
+    int height = SCREEN_HEIGHT;
+    
+    // Bytes per row calculation (width / 8, rounded up)
+    int bytes_per_row = (width + 7) / 8;
+    
+    // Optimized drawing with minimal redundant calculations
+    for (int y = 0; y < height; y++) {
+        int row_start = y * bytes_per_row;
+        
+        for (int byte_x = 0; byte_x < bytes_per_row; byte_x++) {
+            // Only process this byte if it's within bounds
+            if (row_start + byte_x < height * bytes_per_row) {
+                unsigned char current_byte = bitmap[row_start + byte_x];
+                
+                // Skip completely empty bytes (0x00) for performance
+                if (current_byte == 0) {
+                    continue;
+                }
+                
+                // Process each bit in the byte
+                for (int bit = 0; bit < 8; bit++) {
+                    int x = byte_x * 8 + (7 - bit); // MSB first
+                    
+                    // Skip if beyond screen width
+                    if (x >= width) continue;
+                    
+                    // Check if this bit is set (1)
+                    if ((current_byte >> bit) & 0x01) {
+                        plot_pixel(x, y, fg_color);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Wait for VSync
  */
 int wait_for_vsync()
 {
@@ -932,24 +1174,7 @@ int wait_for_vsync()
 }
 
 /**
- * Clear the screen by setting all pixels to black
- */
-void clear_screen()
-{
-    for (int x = 0; x < SCREEN_WIDTH; x++) {
-        for (int y = 0; y < SCREEN_HEIGHT; y++) {
-            plot_pixel(x, y, 0x0000); // Black
-        }
-    }
-}
-
-/**
  * Draw a line using Bresenham's algorithm
- * @param x0 Starting X position
- * @param y0 Starting Y position
- * @param x1 Ending X position
- * @param y1 Ending Y position
- * @param line_color Line color
  */
 void draw_line(int x0, int y0, int x1, int y1, short int line_color)
 {
@@ -1006,10 +1231,7 @@ void draw_line(int x0, int y0, int x1, int y1, short int line_color)
 }
 
 /**
- * Plot a pixel at specified coordinates with bounds checking
- * @param x X position
- * @param y Y position
- * @param line_color Pixel color
+ * Plot a pixel with bounds checking
  */
 void plot_pixel(int x, int y, short int line_color)
 {
@@ -1022,10 +1244,7 @@ void plot_pixel(int x, int y, short int line_color)
 }
 
 /**
- * Shoot a ball with specified momentum and angle
- * @param player Player ID
- * @param momentum Shot power
- * @param angle Shot direction angle
+ * Shoot a ball
  */
 void shoot_the_ball(int player, int momentum, double angle)
 {
@@ -1049,14 +1268,13 @@ void shoot_the_ball(int player, int momentum, double angle)
     // Ensure ball is active
     balls[player].isActive = 1;
     
-    // Print debug info - remove in production
-    // printf("Ball shot: pos=(%d,%d), vel=(%f,%f), momentum=%d\n", 
-    //    balls[player].x, balls[player].y, balls[player].dx, balls[player].dy, momentum);
+    // Initialize previous position
+    balls[player].prev_x = balls[player].x;
+    balls[player].prev_y = balls[player].y;
 }
 
 /**
  * Update ball position and handle collisions
- * @param player Player ID
  */
 void move_ball(int player)
 {
@@ -1067,7 +1285,6 @@ void move_ball(int player)
     if (balls[player].momentum <= 0) {
         balls[player].dx = 0;
         balls[player].dy = 0;
-        
         return;
     }
 
@@ -1112,7 +1329,6 @@ void move_ball(int player)
 
 /**
  * Display 3-digit count on 7-segment displays
- * @param value Value to display (1-100)
  */
 void display_count(int value)
 {
@@ -1146,7 +1362,7 @@ void display_count(int value)
 }
 
 /**
- * Update LED states based on global variables
+ * Update LED states
  */
 void led_update()
 {
@@ -1161,7 +1377,7 @@ void led_update()
 }
 
 /**
- * Configure PS/2 keyboard interface
+ * Configure PS/2 keyboard
  */
 void config_ps2()
 {
@@ -1170,7 +1386,7 @@ void config_ps2()
 }
 
 /**
- * Configure timer with 0.05s interval
+ * Configure timer
  */
 void config_timer()
 {
@@ -1186,7 +1402,7 @@ void config_timer()
 }
 
 /**
- * Interrupt handler for timer and keyboard events
+ * Interrupt handler
  */
 void __attribute__((interrupt)) interrupt_handler()
 {
