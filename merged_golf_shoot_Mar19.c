@@ -12,8 +12,8 @@
 #define PIXEL_BUF_CTRL  0xFF203020  // Pixel buffer controller
 
 /* Game Settings */
-#define MAX_PLAYER      4           // Maximum number of players
-#define BALL_SIZE       12          // Ball size (radius)
+#define MAX_PLAYER      1           // Maximum number of players (reduced from 4 to 1)
+#define BALL_SIZE       4           // Ball size (radius) - changed from 12 to 4
 #define SCREEN_WIDTH    320         // Screen width
 #define SCREEN_HEIGHT   240         // Screen height
 
@@ -49,6 +49,10 @@ volatile int pixel_buffer_start;
 short int Buffer1[240][512];  // Buffer 1: 240 rows x 512 columns (320 + padding)
 short int Buffer2[240][512];  // Buffer 2
 
+// Direction and angle for drawing
+volatile float cos_val = 1.0;
+volatile float sin_val = 0.0;
+
 // Game state management
 volatile int count = 1;             // Counter (1-100)
 volatile int run = 1;               // Counter run flag
@@ -56,6 +60,9 @@ volatile int led0_on = 0;           // LED0 state (0=off, 1=on)
 volatile int led1_on = 0;           // LED1 state (0=off, 1=on)
 volatile int spacebar_pressed = 0;  // Spacebar state
 volatile int break_code = 0;        // PS/2 break code flag
+volatile int button_used = 0;       // Flag to track if button has been used
+volatile float angle = 0.0;         // Current angle for arrow direction
+volatile float angle_increment = 0.05; // Angle change per frame
 
 // Ball objects
 Ball balls[MAX_PLAYER];
@@ -107,20 +114,22 @@ int main(void)
     clear_screen();
     
     // Initialize direction and angle
-    float cos_val = 1.0;
-    float sin_val = 0.0;
-    float angle = 0.0;
-    float angle_increment = 0.05; // Angle change per frame
+    cos_val = 1.0;
+    sin_val = 0.0;
+    angle = 0.0;             // 初期化する変数はグローバルになったのでここでは再宣言なし
+    angle_increment = 0.05;  // 初期化する変数はグローバルになったのでここでは再宣言なし
 
-    // Initialize primary ball
-    balls[0].x = 0;
-    balls[0].y = 120;
-    balls[0].radius = BALL_SIZE; // Fixed: Initialize the radius field
-    balls[0].color = 0x6666;
-    balls[0].isActive = 1;
-    balls[0].dx = 0;
-    balls[0].dy = 0;
-    balls[0].momentum = 0; // Fixed: Initialize momentum field
+    // Initialize the single ball (MAX_PLAYER is now 1)
+    for (int i = 0; i < MAX_PLAYER; i++) {
+        balls[i].x = BALL_SIZE + 2;    // Start position
+        balls[i].y = 120;              // Middle of screen vertically
+        balls[i].radius = BALL_SIZE;   // Set radius
+        balls[i].color = 0x6666;       // Color - gray/blue
+        balls[i].isActive = 0;         // Initially inactive
+        balls[i].dx = 0;               // Initial velocity
+        balls[i].dy = 0;
+        balls[i].momentum = 0;
+    }
 
     /* Initialize hardware and interrupts */
     // Set up interrupt control registers
@@ -152,28 +161,18 @@ int main(void)
     while (1) {
         // Clear screen for new frame
         clear_screen();
-        
-        // Update angle based on arrow key input
-        if (led0_on) {
-            angle -= angle_increment;
-            // Fixed: Keep angle in valid range (0 to 2π)
-            if (angle < 0) {
-                angle += 6.28; // 2π
-            }
-        }
-
-        if (led1_on) {
-            angle += angle_increment;
-        }
-
-        // Handle spacebar input for shooting
-        if (spacebar_pressed) {
-            shoot_the_ball(0, count, angle);
-        }
 
         // Reset angle when it completes a full circle
         if (angle >= 6.28) { // 2π radians
             angle = 0.0;
+        }
+        
+        // Handle spacebar input for shooting - only once
+        if (spacebar_pressed && balls[0].momentum == 0 && !button_used) {
+            // Only shoot if ball is not already in motion and button hasn't been used
+            shoot_the_ball(0, count, angle);
+            spacebar_pressed = 0; // Reset spacebar flag after shooting
+            button_used = 1;      // Mark button as used
         }
 
         // Update and draw active balls
@@ -207,8 +206,8 @@ int main(void)
  */
 void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short int arrow_color)
 {
-    // Arrow length
-    int arrow_length = 80;
+    // Arrow length - REDUCED FROM 80 to 50
+    int arrow_length = 50;
     
     // Calculate arrow tip coordinates
     int tip_x = center_x + (int)(cos_val * arrow_length);
@@ -217,8 +216,8 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
     // Draw arrow shaft
     draw_line(center_x, center_y, tip_x, tip_y, arrow_color);
     
-    // Draw arrowhead
-    int arrowhead_length = 10;
+    // Draw arrowhead - REDUCED FROM 10 to 6
+    int arrowhead_length = 6;
     float angle1 = atan2f(sin_val, cos_val) + 2.5;  // ~150 degrees offset
     float angle2 = atan2f(sin_val, cos_val) - 2.5;  // ~-150 degrees offset
     
@@ -233,23 +232,38 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
 
 /**
  * Draw a filled ball
- * @param x X position
- * @param y Y position
+ * @param x X position (center)
+ * @param y Y position (center)
  * @param color Ball color
  */
 void draw_ball(int x, int y, short int color)
 {
-    // Draw a circular ball with center at (x,y) and radius BALL_SIZE
-    // Fixed: Use proper bounds to ensure we stay within screen limits
-    int left_bound = (x - BALL_SIZE < 0) ? 0 : x - BALL_SIZE;
-    int right_bound = (x + BALL_SIZE >= SCREEN_WIDTH) ? SCREEN_WIDTH - 1 : x + BALL_SIZE;
-    int top_bound = (y - BALL_SIZE < 0) ? 0 : y - BALL_SIZE;
-    int bottom_bound = (y + BALL_SIZE >= SCREEN_HEIGHT) ? SCREEN_HEIGHT - 1 : y + BALL_SIZE;
-
-    for (int i = left_bound; i <= right_bound; i++) {
-        for (int j = top_bound; j <= bottom_bound; j++) {
-            // Use Pythagorean distance for circular shape
-            if ((i - x) * (i - x) + (j - y) * (j - y) <= BALL_SIZE * BALL_SIZE) {
+    // Get radius for calculations
+    int radius = BALL_SIZE;
+    
+    // Calculate drawing boundaries with bounds checking
+    int left = x - radius;
+    int right = x + radius;
+    int top = y - radius;
+    int bottom = y + radius;
+    
+    // Clip to screen boundaries
+    if (left < 0) left = 0;
+    if (right >= SCREEN_WIDTH) right = SCREEN_WIDTH - 1;
+    if (top < 0) top = 0;
+    if (bottom >= SCREEN_HEIGHT) bottom = SCREEN_HEIGHT - 1;
+    
+    // Draw ball as a circle using a distance check for each pixel
+    // This creates a more rounded appearance than a simple square
+    for (int i = left; i <= right; i++) {
+        for (int j = top; j <= bottom; j++) {
+            // Calculate distance from center
+            int dx = i - x;
+            int dy = j - y;
+            int distance_squared = dx*dx + dy*dy;
+            
+            // Only draw pixels within radius
+            if (distance_squared <= radius*radius) {
                 plot_pixel(i, j, color);
             }
         }
@@ -355,12 +369,11 @@ void draw_line(int x0, int y0, int x1, int y1, short int line_color)
  */
 void plot_pixel(int x, int y, short int line_color)
 {
-    // Fixed: Add bounds checking to prevent buffer overflow
+    // Boundary check
     if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-        volatile short int *one_pixel_address;
-        // Calculate pixel address in buffer
-        one_pixel_address = pixel_buffer_start + (y << 10) + (x << 1);
-        *one_pixel_address = line_color;
+        // Calculate pixel buffer address
+        volatile short int *pixel_addr = (volatile short int *)(pixel_buffer_start + (y << 10) + (x << 1));
+        *pixel_addr = line_color;
     }
 }
 
@@ -372,11 +385,29 @@ void plot_pixel(int x, int y, short int line_color)
  */
 void shoot_the_ball(int player, int momentum, double angle)
 {
-    if (player >= 0 && player < MAX_PLAYER) { // Fixed: Add bounds checking
-        balls[player].momentum = momentum;
-        balls[player].dx = cos(angle) * 10;
-        balls[player].dy = sin(angle) * 10;
-    }
+    if (player < 0 || player >= MAX_PLAYER) return; // Invalid player check
+    
+    // Always reset ball position and properties completely when shooting
+    balls[player].radius = BALL_SIZE;
+    balls[player].x = BALL_SIZE + 2; // Fixed starting X
+    balls[player].y = 120;           // Fixed starting Y (middle of screen) 
+    
+    // Calculate velocity components from angle
+    float speed_factor = 2.0 + (momentum / 20.0); // Reduce speed slightly
+    
+    // Set exact velocity values based on angle
+    balls[player].dx = cosf(angle) * speed_factor;
+    balls[player].dy = sinf(angle) * speed_factor;
+    
+    // Set momentum proportional to shot power
+    balls[player].momentum = momentum;
+    
+    // Ensure ball is active
+    balls[player].isActive = 1;
+    
+    // Print debug info - remove in production
+    // printf("Ball shot: pos=(%d,%d), vel=(%f,%f), momentum=%d\n", 
+    //    balls[player].x, balls[player].y, balls[player].dx, balls[player].dy, momentum);
 }
 
 /**
@@ -385,41 +416,54 @@ void shoot_the_ball(int player, int momentum, double angle)
  */
 void move_ball(int player)
 {
-    if (player < 0 || player >= MAX_PLAYER) return; // Fixed: Add bounds checking
+    // Safety checks
+    if (player < 0 || player >= MAX_PLAYER || !balls[player].isActive) return;
 
-    // Decrease momentum
-    if (balls[player].momentum > 0) {
-        balls[player].momentum--;
-    } else {
-        // Stop ball when momentum is depleted
+    // If momentum is depleted, deactivate ball and return
+    if (balls[player].momentum <= 0) {
         balls[player].dx = 0;
         balls[player].dy = 0;
+        
+        return;
     }
+
+    // Decrement momentum
+    balls[player].momentum--;
+
+    // Store current position before moving
+    int old_x = balls[player].x;
+    int old_y = balls[player].y;
     
-    // Update position
-    balls[player].x += balls[player].dx;
-    balls[player].y += balls[player].dy;
+    // Calculate new position
+    int new_x = old_x + (int)balls[player].dx;
+    int new_y = old_y + (int)balls[player].dy;
     
-    // Fixed: Removed incorrectly formatted printf statement
-    // printf("%d\n", balls[player].dx); // Changed ¥n to \n
-    
-    // Handle boundary collisions with reflection
-    // Fixed: Use proper boundary checks accounting for ball radius
-    if (balls[player].x < BALL_SIZE) {
-        balls[player].x = BALL_SIZE;
+    // Check boundary collisions and adjust position if needed
+    if (new_x < BALL_SIZE) {
+        // Left wall collision
+        new_x = BALL_SIZE;
         balls[player].dx = -balls[player].dx;
-    } else if (balls[player].x > SCREEN_WIDTH - BALL_SIZE) {
-        balls[player].x = SCREEN_WIDTH - BALL_SIZE;
+    }
+    else if (new_x > SCREEN_WIDTH - BALL_SIZE) {
+        // Right wall collision
+        new_x = SCREEN_WIDTH - BALL_SIZE;
         balls[player].dx = -balls[player].dx;
     }
     
-    if (balls[player].y < BALL_SIZE) {
-        balls[player].y = BALL_SIZE;
-        balls[player].dy = -balls[player].dy;
-    } else if (balls[player].y > SCREEN_HEIGHT - BALL_SIZE) {
-        balls[player].y = SCREEN_HEIGHT - BALL_SIZE;
+    if (new_y < BALL_SIZE) {
+        // Top wall collision
+        new_y = BALL_SIZE;
         balls[player].dy = -balls[player].dy;
     }
+    else if (new_y > SCREEN_HEIGHT - BALL_SIZE) {
+        // Bottom wall collision
+        new_y = SCREEN_HEIGHT - BALL_SIZE;
+        balls[player].dy = -balls[player].dy;
+    }
+    
+    // Update ball position
+    balls[player].x = new_x;
+    balls[player].y = new_y;
 }
 
 /**
@@ -514,6 +558,21 @@ void __attribute__((interrupt)) interrupt_handler()
             display_count(count);
         }
         
+        // Handle arrow rotation in timer interrupt for smoother movement
+        if (led0_on) {
+            angle -= angle_increment;
+            if (angle < 0) {
+                angle += 6.28; // 2π
+            }
+        }
+        
+        if (led1_on) {
+            angle += angle_increment;
+            if (angle >= 6.28) {
+                angle = 0.0;
+            }
+        }
+        
         // Clear timer interrupt flag
         volatile unsigned int* timer = (volatile unsigned int*)TIMER_BASE;
         timer[0] = 1;  // Set TO bit in status register
@@ -547,7 +606,7 @@ void __attribute__((interrupt)) interrupt_handler()
                     break_code = 0;  // Reset break code flag
                 }
                 else {  // Key press
-                    if (data == 0x29) { // Spacebar
+                    if (data == 0x29 && !button_used) { // Spacebar - only respond if not used
                        run = 0;
                        spacebar_pressed = 1;
                     }
