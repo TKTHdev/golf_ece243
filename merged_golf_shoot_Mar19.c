@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdio.h> // Fixed: incorrect header name <stdout.h> -> <stdio.h>
 
 /* Hardware Addresses */
 #define HEX3_HEX0_BASE  0xFF200020  // 7-segment display HEX3 - HEX0
@@ -12,7 +13,7 @@
 
 /* Game Settings */
 #define MAX_PLAYER      4           // Maximum number of players
-#define BALL_SIZE       12          // Ball size
+#define BALL_SIZE       12          // Ball size (radius)
 #define SCREEN_WIDTH    320         // Screen width
 #define SCREEN_HEIGHT   240         // Screen height
 
@@ -114,10 +115,12 @@ int main(void)
     // Initialize primary ball
     balls[0].x = 0;
     balls[0].y = 120;
+    balls[0].radius = BALL_SIZE; // Fixed: Initialize the radius field
     balls[0].color = 0x6666;
     balls[0].isActive = 1;
     balls[0].dx = 0;
     balls[0].dy = 0;
+    balls[0].momentum = 0; // Fixed: Initialize momentum field
 
     /* Initialize hardware and interrupts */
     // Set up interrupt control registers
@@ -153,6 +156,10 @@ int main(void)
         // Update angle based on arrow key input
         if (led0_on) {
             angle -= angle_increment;
+            // Fixed: Keep angle in valid range (0 to 2π)
+            if (angle < 0) {
+                angle += 6.28; // 2π
+            }
         }
 
         if (led1_on) {
@@ -232,11 +239,17 @@ void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short 
  */
 void draw_ball(int x, int y, short int color)
 {
-    //just draw the ball whose center is at (x,y) 
-    //and the radius is BALL_SIZE
-    for (int i = x - BALL_SIZE; i < x + BALL_SIZE; i++) {
-        for (int j = y - BALL_SIZE; j < y + BALL_SIZE; j++) {
-            if ((i - x) * (i - x) + (j - y) * (j - y) < BALL_SIZE * BALL_SIZE) {
+    // Draw a circular ball with center at (x,y) and radius BALL_SIZE
+    // Fixed: Use proper bounds to ensure we stay within screen limits
+    int left_bound = (x - BALL_SIZE < 0) ? 0 : x - BALL_SIZE;
+    int right_bound = (x + BALL_SIZE >= SCREEN_WIDTH) ? SCREEN_WIDTH - 1 : x + BALL_SIZE;
+    int top_bound = (y - BALL_SIZE < 0) ? 0 : y - BALL_SIZE;
+    int bottom_bound = (y + BALL_SIZE >= SCREEN_HEIGHT) ? SCREEN_HEIGHT - 1 : y + BALL_SIZE;
+
+    for (int i = left_bound; i <= right_bound; i++) {
+        for (int j = top_bound; j <= bottom_bound; j++) {
+            // Use Pythagorean distance for circular shape
+            if ((i - x) * (i - x) + (j - y) * (j - y) <= BALL_SIZE * BALL_SIZE) {
                 plot_pixel(i, j, color);
             }
         }
@@ -335,17 +348,20 @@ void draw_line(int x0, int y0, int x1, int y1, short int line_color)
 }
 
 /**
- * Plot a pixel at specified coordinates
+ * Plot a pixel at specified coordinates with bounds checking
  * @param x X position
  * @param y Y position
  * @param line_color Pixel color
  */
 void plot_pixel(int x, int y, short int line_color)
 {
-    volatile short int *one_pixel_address;
-    // Calculate pixel address in buffer
-    one_pixel_address = pixel_buffer_start + (y << 10) + (x << 1);
-    *one_pixel_address = line_color;
+    // Fixed: Add bounds checking to prevent buffer overflow
+    if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
+        volatile short int *one_pixel_address;
+        // Calculate pixel address in buffer
+        one_pixel_address = pixel_buffer_start + (y << 10) + (x << 1);
+        *one_pixel_address = line_color;
+    }
 }
 
 /**
@@ -356,9 +372,11 @@ void plot_pixel(int x, int y, short int line_color)
  */
 void shoot_the_ball(int player, int momentum, double angle)
 {
-    balls[player].momentum = momentum;
-    balls[player].dx = cos(angle) * 10;
-    balls[player].dy = sin(angle) * 10;
+    if (player >= 0 && player < MAX_PLAYER) { // Fixed: Add bounds checking
+        balls[player].momentum = momentum;
+        balls[player].dx = cos(angle) * 10;
+        balls[player].dy = sin(angle) * 10;
+    }
 }
 
 /**
@@ -367,6 +385,8 @@ void shoot_the_ball(int player, int momentum, double angle)
  */
 void move_ball(int player)
 {
+    if (player < 0 || player >= MAX_PLAYER) return; // Fixed: Add bounds checking
+
     // Decrease momentum
     if (balls[player].momentum > 0) {
         balls[player].momentum--;
@@ -380,11 +400,24 @@ void move_ball(int player)
     balls[player].x += balls[player].dx;
     balls[player].y += balls[player].dy;
     
+    // Fixed: Removed incorrectly formatted printf statement
+    // printf("%d\n", balls[player].dx); // Changed ¥n to \n
+    
     // Handle boundary collisions with reflection
-    if (balls[player].x < 0 || balls[player].x > SCREEN_WIDTH - BALL_SIZE) {
+    // Fixed: Use proper boundary checks accounting for ball radius
+    if (balls[player].x < BALL_SIZE) {
+        balls[player].x = BALL_SIZE;
+        balls[player].dx = -balls[player].dx;
+    } else if (balls[player].x > SCREEN_WIDTH - BALL_SIZE) {
+        balls[player].x = SCREEN_WIDTH - BALL_SIZE;
         balls[player].dx = -balls[player].dx;
     }
-    if (balls[player].y < 0 || balls[player].y > SCREEN_HEIGHT - BALL_SIZE) {
+    
+    if (balls[player].y < BALL_SIZE) {
+        balls[player].y = BALL_SIZE;
+        balls[player].dy = -balls[player].dy;
+    } else if (balls[player].y > SCREEN_HEIGHT - BALL_SIZE) {
+        balls[player].y = SCREEN_HEIGHT - BALL_SIZE;
         balls[player].dy = -balls[player].dy;
     }
 }
