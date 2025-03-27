@@ -103,12 +103,10 @@ void config_timer();
 void __attribute__((interrupt)) interrupt_handler();
 void generate_course();
 void draw_course();
-void initialize_players();
 
 /* Main function */
 int main(void) {
 	// Initialize players
-	initialize_players();
 
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
     
