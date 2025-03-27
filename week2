@@ -75,7 +75,7 @@ volatile int attempts = COUNTDOWN_START;  // Attempts remaining
 
 int count_pause = 0; // Pause counter
 
-Ball balls[MAX_PLAYER];
+Ball balls[PLAYER_NUM];
 
 /* Function prototypes */
 void clear_screen();
@@ -104,7 +104,8 @@ void draw_course();
 int main(void) {
 
 
-
+	// Initialize players
+	initialize_players();
 
 
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
@@ -124,7 +125,7 @@ int main(void) {
     clear_screen();
     
     // Initialize ball
-    for (int i = 0; i < MAX_PLAYER; i++) {
+    for (int i = 0; i < PLAYER_NUM; i++) {
         balls[i].x = BALL_SIZE + 2;
         balls[i].y = 120;
         balls[i].radius = BALL_SIZE;
@@ -181,7 +182,7 @@ int main(void) {
         }
         
         // Update and draw active balls
-        for (int i = 0; i < MAX_PLAYER; i++) {
+        for (int i = 0; i < PLAYER_NUM; i++) {
             if (balls[i].isActive == 1) {
                 move_ball(i);
                 draw_ball(balls[i].x, balls[i].y, balls[i].color);
@@ -396,7 +397,7 @@ void clear_timer_area() {
 
 /* Shoot ball with given momentum and angle */
 void shoot_the_ball(int player, int momentum, double angle) {
-    if (player < 0 || player >= MAX_PLAYER) return;
+    if (player < 0 || player >= PLAYER_NUM) return;
     
     // Reset ball position and properties
     balls[player].radius = BALL_SIZE;
@@ -413,7 +414,7 @@ void shoot_the_ball(int player, int momentum, double angle) {
 
 /* Update ball position and handle collisions */
 void move_ball(int player) {
-    if (player < 0 || player >= MAX_PLAYER || !balls[player].isActive) return;
+    if (player < 0 || player >= PLAYER_NUM || !balls[player].isActive) return;
 
     // If momentum depleted, stop ball
     if (balls[player].momentum <= 0) {
@@ -461,7 +462,7 @@ void move_ball(int player) {
 
 /*Check if the moving ball hit the wall, and if so, bounce*/
 void check_wall_collision(int player){
-	if(player < 0 || player >= MAX_PLAYER || !balls[player].isActive) return;
+	if(player < 0 || player >= PLAYER_NUM || !balls[player].isActive) return;
 	
 	//Check if the ball hit the wall
 	for(int i = 0; i < LINE_NUM; i++){
