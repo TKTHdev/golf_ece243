@@ -22,6 +22,7 @@
 #define BALL_SIZE      4               // Ball radius
 #define SCREEN_WIDTH   320             // Screen width
 #define SCREEN_HEIGHT  240             // Screen height
+#define LINE_NUM 2
 
 /* 7-segment display patterns for digits */
 const uint8_t SEVEN_SEG[10] = {
@@ -38,10 +39,18 @@ typedef struct {
     int momentum;     // Power
 } Ball;
 
+
+typedef struct {
+	int x0, y0, x1, y1;
+	int isVertical;
+}Line;
+
 /* Global variables */
 volatile int pixel_buffer_start;
 short int Buffer1[240][512];  // Buffer 1
 short int Buffer2[240][512];  // Buffer 2
+
+Line lines[LINE_NUM];
 
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
