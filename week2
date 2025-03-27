@@ -22,7 +22,8 @@
 #define BALL_SIZE      4               // Ball radius
 #define SCREEN_WIDTH   320             // Screen width
 #define SCREEN_HEIGHT  240             // Screen height
-#define LINE_NUM 2
+#define LINE_NUM 2				//Number of lines in the course
+#define PLAYER_NUM 1		//Number of players	
 
 /* 7-segment display patterns for digits */
 const uint8_t SEVEN_SEG[10] = {
@@ -45,12 +46,18 @@ typedef struct {
 	int isVertical;
 }Line;
 
+typedef struct{
+	int x,y;
+	int id;	
+}Player;
+
 /* Global variables */
 volatile int pixel_buffer_start;
 short int Buffer1[240][512];  // Buffer 1
 short int Buffer2[240][512];  // Buffer 2
 
 Line lines[LINE_NUM]; //Array of lines
+Player players[PLAYER_NUM]; //Array of players
 
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
@@ -65,6 +72,8 @@ volatile float angle = 0.0;           // Current angle
 volatile float angle_increment = 0.05; // Angle change per frame
 volatile int countdown = COUNTDOWN_START; // Countdown timer
 volatile int attempts = COUNTDOWN_START;  // Attempts remaining
+
+int count_pause = 0; // Pause counter
 
 Ball balls[MAX_PLAYER];
 
@@ -93,6 +102,11 @@ void draw_course();
 
 /* Main function */
 int main(void) {
+
+
+
+
+
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
     
     // Setup interrupt handling
@@ -163,6 +177,7 @@ int main(void) {
             button_used = 1;
             attempts--;
             countdown = COUNTDOWN_START;
+			count_pause = 1;
         }
         
         // Update and draw active balls
@@ -226,6 +241,17 @@ void generate_course(){
 	lines[1].y1 = 200;
 	lines[1].isVertical = 0;
 }
+
+/*initialize players*/
+void initialize_players(){
+	for(int i = 0; i < PLAYER_NUM; i++){
+		players[i].x = 0;
+		players[i].y = 120;
+		players[i].id = i;
+	}
+}
+
+
 /*Draw course*/
 
 void draw_course(){
@@ -426,7 +452,37 @@ void move_ball(int player) {
     // Update position
     balls[player].x = new_x;
     balls[player].y = new_y;
+
+	// Check for wall collision
+	check_wall_collision(player);
+
+
 }
+
+/*Check if the moving ball hit the wall, and if so, bounce*/
+void check_wall_collision(int player){
+	if(player < 0 || player >= MAX_PLAYER || !balls[player].isActive) return;
+	
+	//Check if the ball hit the wall
+	for(int i = 0; i < LINE_NUM; i++){
+		if(lines[i].isVertical){
+			if(balls[player].x + balls[player].radius >= lines[i].x0 && balls[player].x - balls[player].radius <= lines[i].x0){
+				if(balls[player].y + balls[player].radius >= lines[i].y0 && balls[player].y - balls[player].radius <= lines[i].y1){
+					balls[player].dx = -balls[player].dx;
+				}
+			}
+		}
+		else{
+			if(balls[player].y + balls[player].radius >= lines[i].y0 && balls[player].y - balls[player].radius <= lines[i].y0){
+				if(balls[player].x + balls[player].radius >= lines[i].x0 && balls[player].x - balls[player].radius <= lines[i].x1){
+					balls[player].dy = -balls[player].dy;
+				}
+			}
+		}
+	}
+}
+
+
 
 /* Display count on 7-segment displays */
 void display_count(int value) {
@@ -486,8 +542,8 @@ void __attribute__((interrupt)) interrupt_handler() {
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause));
     mcause = mcause & 0x7FFFFFFF;
 
-    if (mcause == 17) { // Timer2 interrupt
-        if (countdown > 0) {
+    if (mcause == 17 && !count_pause) { // Timer2 interrupt
+        if (countdown > 0 ) {
             countdown--;
         }
         volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
