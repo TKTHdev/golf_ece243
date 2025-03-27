@@ -18,7 +18,6 @@
 #define TIMER_Y        10
 #define ATTEMPTS_X     (SCREEN_WIDTH - 20)  // Bottom right corner
 #define ATTEMPTS_Y     (SCREEN_HEIGHT - 20)
-#define MAX_PLAYER     1               // Maximum number of players
 #define BALL_SIZE      4               // Ball radius
 #define SCREEN_WIDTH   320             // Screen width
 #define SCREEN_HEIGHT  240             // Screen height
@@ -621,6 +620,7 @@ void __attribute__((interrupt)) interrupt_handler() {
                     if (data == 0x29 && !button_used) { // Spacebar
                        run = 0;
                        spacebar_pressed = 1;
+                       printf("Spacebar pressed\n");
                     }
                     else if (data == 0x6B) { // Left arrow
                         led0_on = 1;
