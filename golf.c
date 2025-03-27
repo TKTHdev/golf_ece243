@@ -57,7 +57,6 @@ short int Buffer1[240][512];  // Buffer 1
 short int Buffer2[240][512];  // Buffer 2
 
 Line lines[LINE_NUM]; //Array of lines
-Player players[PLAYER_NUM]; //Array of players
 
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
@@ -72,6 +71,10 @@ volatile float angle = 0.0;           // Current angle
 volatile float angle_increment = 0.05; // Angle change per frame
 volatile int countdown = COUNTDOWN_START; // Countdown timer
 volatile int attempts = COUNTDOWN_START;  // Attempts remaining
+
+
+int player_x = 0; // Player x position
+int player_y = 120; // Player y position
 
 int count_pause = 0; // Pause counter
 
@@ -171,18 +174,16 @@ int main(void) {
         }
         
         // Handle shooting
-		for (int i = 0; i < PLAYER_NUM; i++) {
-			if ((spacebar_pressed && balls[i].momentum == 0 && !button_used) || (countdown == 0)) {
-				shoot_the_ball(i, count, angle);
+        if ((spacebar_pressed && balls[0].momentum == 0 && !button_used) || (countdown == 0)) {
+				shoot_the_ball(0, count, angle);
 				spacebar_pressed = 0;
 				button_used = 1;
 				attempts--;
 				countdown = COUNTDOWN_START;
 				count_pause = 1;
-				players[i].x = balls[i].x;
-				players[i].y = balls[i].y;
-			}
-		}
+                player_x = balls[0].x;
+                player_y = balls[0].y;
+        }
         
         // Update and draw active balls
         for (int i = 0; i < PLAYER_NUM; i++) {
@@ -197,7 +198,7 @@ int main(void) {
         sin_val = sinf(angle);
 		for (int i = 0; i < PLAYER_NUM; i++) {
 			if(balls[i].isActive == 0){
-				draw_arrow(players[i].x, players[i].y, cos_val, sin_val, 0xF800);
+				draw_arrow(player_x, player_y, cos_val, sin_val, 0xF800);
 			}
 		}
         
@@ -250,14 +251,7 @@ void generate_course(){
 	lines[1].isVertical = 0;
 }
 
-/*initialize players*/
-void initialize_players(){
-	for(int i = 0; i < PLAYER_NUM; i++){
-		players[i].x = 0;
-		players[i].y = 120;
-		players[i].id = i;
-	}
-}
+
 
 
 /*Draw course*/
@@ -426,8 +420,8 @@ void move_ball(int player) {
         button_used = 0;
         
         // Update player position to match the ball's final position
-        players[player].x = balls[player].x;
-        players[player].y = balls[player].y;
+        player_x = balls[player].x;
+        player_y = balls[player].y;
         
         // Reset count_pause to allow countdown timer to continue
         count_pause = 0;
