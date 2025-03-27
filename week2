@@ -39,7 +39,7 @@ typedef struct {
     int momentum;     // Power
 } Ball;
 
-
+/*Line structure*/
 typedef struct {
 	int x0, y0, x1, y1;
 	int isVertical;
@@ -50,7 +50,7 @@ volatile int pixel_buffer_start;
 short int Buffer1[240][512];  // Buffer 1
 short int Buffer2[240][512];  // Buffer 2
 
-Line lines[LINE_NUM];
+Line lines[LINE_NUM]; //Array of lines
 
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
@@ -88,6 +88,8 @@ void led_update();
 void config_ps2();
 void config_timer();
 void __attribute__((interrupt)) interrupt_handler();
+void generate_course();
+void draw_course();
 
 /* Main function */
 int main(void) {
@@ -138,10 +140,16 @@ int main(void) {
     __asm__ volatile ("csrw mtvec, %0" :: "r"(mtvec_value));
     
     display_count(count);
-    
+
+	// Generate course
+	generate_course();
+
     /* Main game loop */
     while (1) {
         clear_screen();
+
+		// Draw course
+		draw_course();
         
         // Reset angle after full circle
         if (angle >= 6.28) {
@@ -201,6 +209,31 @@ void clear_attempts_area() {
         }
     }
 }
+
+/*Generate course*/
+void generate_course(){
+	//Line 1
+	lines[0].x0 = 0;
+	lines[0].y0 = 100;
+	lines[0].x1 = 320;
+	lines[0].y1 = 100;
+	lines[0].isVertical = 0;
+	
+	//Line 2
+	lines[1].x0 = 0;
+	lines[1].y0 = 200;
+	lines[1].x1 = 320;
+	lines[1].y1 = 200;
+	lines[1].isVertical = 0;
+}
+/*Draw course*/
+
+void draw_course(){
+	for(int i = 0; i < LINE_NUM; i++){
+		draw_line(lines[i].x0, lines[i].y0, lines[i].x1, lines[i].y1, 0xFFFF);
+	}
+}
+
 
 /* Draw attempts counter with border */
 void draw_attempts(int x, int y, int number, short int number_color, short int border_color) {
