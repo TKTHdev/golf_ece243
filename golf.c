@@ -21,8 +21,15 @@
 #define BALL_SIZE      4               // Ball radius
 #define SCREEN_WIDTH   320             // Screen width
 #define SCREEN_HEIGHT  240             // Screen height
-#define LINE_NUM 2				//Number of lines in the course
-#define PLAYER_NUM 1		//Number of players	
+#define LINE_NUM       2               // Number of lines in the course
+#define PLAYER_NUM     1               // Number of players	
+
+
+/*bool*/
+typedef int bool;
+#define true 1
+#define false 0
+
 
 /* 7-segment display patterns for digits */
 const uint8_t SEVEN_SEG[10] = {
@@ -39,23 +46,23 @@ typedef struct {
     int momentum;     // Power
 } Ball;
 
-/*Line structure*/
+/* Line structure */
 typedef struct {
-	int x0, y0, x1, y1;
-	int isVertical;
-}Line;
+    int x0, y0, x1, y1;
+    int isVertical;
+} Line;
 
-typedef struct{
-	int x,y;
-	int id;	
-}Player;
+typedef struct {
+    int x, y;
+    int id;	
+} Player;
 
 /* Global variables */
 volatile int pixel_buffer_start;
 short int Buffer1[240][512];  // Buffer 1
 short int Buffer2[240][512];  // Buffer 2
 
-Line lines[LINE_NUM]; //Array of lines
+Line lines[LINE_NUM]; // Array of lines
 
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
@@ -65,17 +72,17 @@ volatile int led0_on = 0;             // LED0 state
 volatile int led1_on = 0;             // LED1 state
 volatile int spacebar_pressed = 0;    // Spacebar state
 volatile int break_code = 0;          // PS/2 break code flag
+volatile int extended_code = 0;       // PS/2 extended code flag
 volatile int button_used = 0;         // Button used flag
 volatile float angle = 0.0;           // Current angle
 volatile float angle_increment = 0.05; // Angle change per frame
 volatile int countdown = COUNTDOWN_START; // Countdown timer
 volatile int attempts = COUNTDOWN_START;  // Attempts remaining
 
-
 int player_x = 0; // Player x position
 int player_y = 120; // Player y position
 
-int count_pause = 0; // Pause counter
+volatile int count_pause = 0; // Pause counter for countdown timer
 
 Ball balls[PLAYER_NUM];
 
@@ -93,7 +100,7 @@ void draw_attempts(int x, int y, int number, short int number_color, short int b
 void clear_attempts_area();
 void clear_timer_area();
 void move_ball(int player);
-void check_wall_collision(int player); // Added function prototype
+void check_wall_collision(int player);
 void shoot_the_ball(int player, int momentum, double angle);
 void display_count(int value);
 void led_update();
@@ -105,8 +112,6 @@ void draw_course();
 
 /* Main function */
 int main(void) {
-	// Initialize players
-
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
     
     // Setup interrupt handling
@@ -125,8 +130,8 @@ int main(void) {
     
     // Initialize ball
     for (int i = 0; i < PLAYER_NUM; i++) {
-        balls[i].x = 0;
-        balls[i].y = 120;
+        balls[i].x = player_x;
+        balls[i].y = player_y;
         balls[i].radius = BALL_SIZE;
         balls[i].color = 0x6666;
         balls[i].isActive = 0;
@@ -155,55 +160,66 @@ int main(void) {
     
     display_count(count);
 
-	// Generate course
-	generate_course();
+    // Generate course
+    generate_course();
 
     /* Main game loop */
     while (1) {
         clear_screen();
 
-		// Draw course
-		draw_course();
+        // Draw course
+        draw_course();
         
         // Reset angle after full circle
         if (angle >= 6.28) {
             angle = 0.0;
+        } else if (angle < 0) {
+            angle += 6.28;
         }
-        
-        // Handle shooting
-        if ((spacebar_pressed && balls[0].momentum == 0 && !button_used) || (countdown == 0)) {
-				shoot_the_ball(0, count, angle);
-				spacebar_pressed = 0;
-				button_used = 1;
-				attempts--;
-				countdown = COUNTDOWN_START;
-				count_pause = 1;
-                player_x = balls[0].x;
-                player_y = balls[0].y;
+
+        // Handle shooting - Modified logic for clarity
+        if ((spacebar_pressed && !balls[0].isActive && !button_used) || (countdown == 0 && !balls[0].isActive)) {
+            shoot_the_ball(0, count, angle);
+            spacebar_pressed = 0;
+            button_used = 1;
+            attempts--;
+            countdown = COUNTDOWN_START;
+            count_pause = 1;
+            // Don't update player position here - wait until ball stops
         }
-        
+
+
+        printf("momentum: %d\n", balls[0].momentum);
+
         // Update and draw active balls
         for (int i = 0; i < PLAYER_NUM; i++) {
-            if (balls[i].isActive == 1) {
+            if (balls[i].isActive) {
                 move_ball(i);
                 draw_ball(balls[i].x, balls[i].y, balls[i].color);
             }
         }
         
-        // Update direction and draw arrow
+        // Update direction and draw arrow - only if no balls are active
         cos_val = cosf(angle);
         sin_val = sinf(angle);
-		for (int i = 0; i < PLAYER_NUM; i++) {
-			if(balls[i].isActive == 0){
-				draw_arrow(player_x, player_y, cos_val, sin_val, 0xF800);
-			}
-		}
+        bool any_ball_active = false;
+        for (int i = 0; i < PLAYER_NUM; i++) {
+            if (balls[i].isActive) {
+                any_ball_active = true;
+                break;
+            }
+        }
+        
+        if (!any_ball_active) {
+            draw_arrow(player_x, player_y, cos_val, sin_val, 0xF800);
+        }
         
         // Update UI elements
         clear_timer_area();
         clear_attempts_area();
         draw_number(TIMER_X, TIMER_Y, countdown, 0xFFFF);
         draw_attempts(ATTEMPTS_X, ATTEMPTS_Y, attempts, 0xFFFF, 0x07E0);
+        
         
         // Swap buffers
         wait_for_vsync();
@@ -231,34 +247,29 @@ void clear_attempts_area() {
     }
 }
 
-/*Generate course*/
-void generate_course(){
-	//Line 1
-	lines[0].x0 = 0;
-	lines[0].y0 = 100;
-	lines[0].x1 = 320;
-	lines[0].y1 = 100;
-	lines[0].isVertical = 0;
-	
-	//Line 2
-	lines[1].x0 = 0;
-	lines[1].y0 = 200;
-	lines[1].x1 = 320;
-	lines[1].y1 = 200;
-	lines[1].isVertical = 0;
+/* Generate course */
+void generate_course() {
+    // Line 1
+    lines[0].x0 = 0;
+    lines[0].y0 = 100;
+    lines[0].x1 = 320;
+    lines[0].y1 = 100;
+    lines[0].isVertical = 0;
+    
+    // Line 2
+    lines[1].x0 = 0;
+    lines[1].y0 = 200;
+    lines[1].x1 = 320;
+    lines[1].y1 = 200;
+    lines[1].isVertical = 0;
 }
 
-
-
-
-/*Draw course*/
-
-void draw_course(){
-	for(int i = 0; i < LINE_NUM; i++){
-		draw_line(lines[i].x0, lines[i].y0, lines[i].x1, lines[i].y1, 0xFFFF);
-	}
+/* Draw course */
+void draw_course() {
+    for (int i = 0; i < LINE_NUM; i++) {
+        draw_line(lines[i].x0, lines[i].y0, lines[i].x1, lines[i].y1, 0xFFFF);
+    }
 }
-
 
 /* Draw attempts counter with border */
 void draw_attempts(int x, int y, int number, short int number_color, short int border_color) {
@@ -274,7 +285,7 @@ void draw_attempts(int x, int y, int number, short int number_color, short int b
 
 /* Draw direction arrow */
 void draw_arrow(int center_x, int center_y, float cos_val, float sin_val, short int arrow_color) {
-    int arrow_length = 50;
+    int arrow_length = 20;  // Reduced length for better visualization
     int tip_x = center_x + (int)(cos_val * arrow_length);
     int tip_y = center_y + (int)(sin_val * arrow_length);
     
@@ -401,8 +412,12 @@ void shoot_the_ball(int player, int momentum, double angle) {
     float speed_factor = 2.0 + (momentum / 20.0);
     balls[player].dx = cosf(angle) * speed_factor;
     balls[player].dy = sinf(angle) * speed_factor;
-    balls[player].momentum = momentum;
+    balls[player].momentum = momentum/2;
     balls[player].isActive = 1;
+    
+    // Use current player position as starting point
+    balls[player].x = player_x;
+    balls[player].y = player_y;
 }
 
 /* Update ball position and handle collisions */
@@ -414,7 +429,7 @@ void move_ball(int player) {
         balls[player].dx = 0;
         balls[player].dy = 0;
         balls[player].isActive = 0;
-        button_used = 0;
+        button_used = 0;  // Allow new shots
         
         // Update player position to match the ball's final position
         player_x = balls[player].x;
@@ -434,23 +449,23 @@ void move_ball(int player) {
     int new_x = old_x + (int)balls[player].dx;
     int new_y = old_y + (int)balls[player].dy;
     
-    // Handle wall collisions
+    // Handle screen boundary collisions with proper bounce physics
     if (new_x < BALL_SIZE) {
         new_x = BALL_SIZE;
-        balls[player].dx = -balls[player].dx;
+        balls[player].dx = -balls[player].dx * 0.8f;  // Some energy loss on collision
     }
     else if (new_x > SCREEN_WIDTH - BALL_SIZE) {
         new_x = SCREEN_WIDTH - BALL_SIZE;
-        balls[player].dx = -balls[player].dx;
+        balls[player].dx = -balls[player].dx * 0.8f;
     }
     
     if (new_y < BALL_SIZE) {
         new_y = BALL_SIZE;
-        balls[player].dy = -balls[player].dy;
+        balls[player].dy = -balls[player].dy * 0.8f;
     }
     else if (new_y > SCREEN_HEIGHT - BALL_SIZE) {
         new_y = SCREEN_HEIGHT - BALL_SIZE;
-        balls[player].dy = -balls[player].dy;
+        balls[player].dy = -balls[player].dy * 0.8f;
     }
     
     // Update position
@@ -461,37 +476,53 @@ void move_ball(int player) {
     check_wall_collision(player);
 }
 
-/*Check if the moving ball hit the wall, and if so, bounce*/
-void check_wall_collision(int player){
-    if(player < 0 || player >= PLAYER_NUM || !balls[player].isActive) return;
+/* Check if the moving ball hit the wall, and if so, bounce */
+void check_wall_collision(int player) {
+    if (player < 0 || player >= PLAYER_NUM || !balls[player].isActive) return;
     
-    // Check if the ball hit the wall
-    for(int i = 0; i < LINE_NUM; i++){
-        if(lines[i].isVertical){
+    float collision_margin = 0.5f; // Add a small margin to avoid getting stuck
+    
+    // Check if the ball hit any of the course walls
+    for (int i = 0; i < LINE_NUM; i++) {
+        if (lines[i].isVertical) {
             // Collision with vertical wall
-            if(balls[player].x + balls[player].radius >= lines[i].x0 && 
-               balls[player].x - balls[player].radius <= lines[i].x0){
+            if (balls[player].x + balls[player].radius >= lines[i].x0 - collision_margin && 
+                balls[player].x - balls[player].radius <= lines[i].x0 + collision_margin) {
                 
                 // Check if ball is within the vertical range of the line
-                if(balls[player].y + balls[player].radius >= lines[i].y0 && 
-                   balls[player].y - balls[player].radius <= lines[i].y1){
+                if (balls[player].y + balls[player].radius >= lines[i].y0 && 
+                   balls[player].y - balls[player].radius <= lines[i].y1) {
                     
-                    // Reverse horizontal velocity
-                    balls[player].dx = -balls[player].dx;
+                    // Move the ball away from the wall to prevent sticking
+                    if (balls[player].dx > 0) {
+                        balls[player].x = lines[i].x0 - balls[player].radius - collision_margin;
+                    } else {
+                        balls[player].x = lines[i].x0 + balls[player].radius + collision_margin;
+                    }
+                    
+                    // Reverse horizontal velocity with energy loss
+                    balls[player].dx = -balls[player].dx * 0.8f;
                 }
             }
         }
-        else{
+        else {
             // Collision with horizontal wall
-            if(balls[player].y + balls[player].radius >= lines[i].y0 && 
-               balls[player].y - balls[player].radius <= lines[i].y0){
+            if (balls[player].y + balls[player].radius >= lines[i].y0 - collision_margin && 
+               balls[player].y - balls[player].radius <= lines[i].y0 + collision_margin) {
                 
                 // Check if ball is within the horizontal range of the line
-                if(balls[player].x + balls[player].radius >= lines[i].x0 && 
-                   balls[player].x - balls[player].radius <= lines[i].x1){
+                if (balls[player].x + balls[player].radius >= lines[i].x0 && 
+                   balls[player].x - balls[player].radius <= lines[i].x1) {
                     
-                    // Reverse vertical velocity
-                    balls[player].dy = -balls[player].dy;
+                    // Move the ball away from the wall to prevent sticking
+                    if (balls[player].dy > 0) {
+                        balls[player].y = lines[i].y0 - balls[player].radius - collision_margin;
+                    } else {
+                        balls[player].y = lines[i].y0 + balls[player].radius + collision_margin;
+                    }
+                    
+                    // Reverse vertical velocity with energy loss
+                    balls[player].dy = -balls[player].dy * 0.8f;
                 }
             }
         }
@@ -556,15 +587,14 @@ void __attribute__((interrupt)) interrupt_handler() {
     __asm__ volatile ("csrr %0, mcause" : "=r"(mcause));
     mcause = mcause & 0x7FFFFFFF;
 
-    if (mcause == 17 && !count_pause) { // Timer2 interrupt
-        if (countdown > 0 ) {
+    if (mcause == 17) { // Timer2 interrupt - countdown timer
+        if (!count_pause && countdown > 0) {
             countdown--;
         }
         volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
         timer[0] = 1;  // Clear interrupt
     }
-
-    if (mcause == 16) { // Timer interrupt
+    else if (mcause == 16) { // Timer interrupt - for power counter
         if (run) {
             count = count + 1;
             if (count > 100) count = 1;
@@ -601,7 +631,7 @@ void __attribute__((interrupt)) interrupt_handler() {
                 break_code = 1;
             }
             else if (data == 0xE0) { // Extended key prefix
-                // Wait for following data byte
+                extended_code = 1;
             }
             else {
                 if (break_code) {  // Key release
@@ -617,10 +647,8 @@ void __attribute__((interrupt)) interrupt_handler() {
                     break_code = 0;
                 }
                 else {  // Key press
-                    if (data == 0x29 && !button_used) { // Spacebar
-                       run = 0;
-                       spacebar_pressed = 1;
-                       printf("Spacebar pressed\n");
+                    if (data == 0x29 && !button_used && !balls[0].isActive) { // Spacebar - only if no active ball
+                        spacebar_pressed = 1;
                     }
                     else if (data == 0x6B) { // Left arrow
                         led0_on = 1;
@@ -629,6 +657,8 @@ void __attribute__((interrupt)) interrupt_handler() {
                         led1_on = 1;
                     }
                 }
+                
+                extended_code = 0; // Reset extended code flag
             }
         }
         
