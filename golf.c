@@ -120,7 +120,6 @@ void clear_ps2_fifo();
 
 
 
-Course course;
 
 /* Main function */
 int main(void) {
@@ -139,6 +138,11 @@ int main(void) {
     *(pixel_ctrl_ptr + 1) = (int)Buffer2;
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     clear_screen();
+
+
+
+
+
     
     // Initialize ball
     for (int i = 0; i < PLAYER_NUM; i++) {
@@ -173,6 +177,7 @@ int main(void) {
     display_count(count);
 
     // Generate course
+    Course course;
     generate_course(&course,0);
 
     /* Main game loop */
