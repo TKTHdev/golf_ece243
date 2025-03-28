@@ -300,7 +300,7 @@ void generate_course(Course* course, int course_id) {
         course->lines[1].isVertical = 0;
 
         course->goal_x = 320;
-        course->goal_y = 100;
+        course->goal_y = 150;
 
     }
     else if(course_id = 2){}
@@ -309,8 +309,15 @@ void generate_course(Course* course, int course_id) {
 
 /* Draw course */
 void draw_course(Course *course) {
+    //draw the walls
     for (int i = 0; i < LINE_NUM; i++) {
         draw_line(course->lines[i].x0, course->lines[i].y0, course->lines[i].x1, course->lines[i].y1, 0xFFFF);
+    }
+    //draw the goal (yellow rectalgle with size 10x10)
+    for (int x = course->goal_x - 5; x < course->goal_x + 5; x++) {
+        for (int y = course->goal_y - 5; y < course->goal_y + 5; y++) {
+            plot_pixel(x, y, 0xFFE0);
+        }
     }
 }
 
@@ -521,6 +528,23 @@ void move_ball(int player, Course *course) {
     // Update position
     balls[player].x = new_x;
     balls[player].y = new_y;
+
+    //check if the ball is in the goal
+    if (balls[player].x >= course->goal_x - 5 && balls[player].x <= course->goal_x + 5 && balls[player].y >= course->goal_y - 5 && balls[player].y <= course->goal_y + 5)
+    {
+        balls[player].isActive = 0;
+        balls[player].dx = 0;
+        balls[player].dy = 0;
+        balls[player].x = player_x;
+        balls[player].y = player_y;
+        button_used = 0;
+        count_pause = 0;
+        run = 1;
+        attempts = COUNTDOWN_START;
+        count = 1;
+        
+    }
+
 
     // Check for wall collision
     check_wall_collision(player, course);
