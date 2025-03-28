@@ -109,6 +109,7 @@ void config_timer();
 void __attribute__((interrupt)) interrupt_handler();
 void generate_course();
 void draw_course();
+void clear_ps2_fifo();
 
 /* Main function */
 int main(void) {
@@ -161,7 +162,7 @@ int main(void) {
     display_count(count);
 
     // Generate course
-    generate_course();
+    generate_course(0);
 
     /* Main game loop */
     while (1) {
@@ -179,10 +180,12 @@ int main(void) {
 
         // Handle shooting - Modified logic for clarity
         if ((spacebar_pressed && !balls[0].isActive && !button_used) || (countdown == 0 && !balls[0].isActive)) {
+            run = 0;
             shoot_the_ball(0, count, angle);
             spacebar_pressed = 0;
             button_used = 1;
             attempts--;
+            count = 0;
             countdown = COUNTDOWN_START;
             count_pause = 1;
             // Don't update player position here - wait until ball stops
@@ -224,6 +227,9 @@ int main(void) {
         // Swap buffers
         wait_for_vsync();
         pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+        clear_ps2_fifo();
+
+        printf("led0: %d, led1: %d\n", led0_on, led1_on);
     }
 }
 
@@ -235,6 +241,18 @@ void config_timer2() {
     timer[3] = (delay >> 16) & 0xFFFF;
     timer[1] = 7;  // START, CONT, ITO
 }
+
+/* Function to clear the PS/2 keyboard FIFO */
+void clear_ps2_fifo() {
+    volatile unsigned int* ps2 = (volatile unsigned int*)PS2_BASE;
+    
+    // Read and discard all data in the FIFO until it's empty
+    while (ps2[0] & 0x8000) {
+        unsigned int dummy_read = ps2[0];
+        // Just read to clear the buffer, no need to process
+    }
+}
+
 
 /* Clear attempts display area */
 void clear_attempts_area() {
@@ -248,20 +266,26 @@ void clear_attempts_area() {
 }
 
 /* Generate course */
-void generate_course() {
-    // Line 1
-    lines[0].x0 = 0;
-    lines[0].y0 = 100;
-    lines[0].x1 = 320;
-    lines[0].y1 = 100;
-    lines[0].isVertical = 0;
-    
-    // Line 2
-    lines[1].x0 = 0;
-    lines[1].y0 = 200;
-    lines[1].x1 = 320;
-    lines[1].y1 = 200;
-    lines[1].isVertical = 0;
+void generate_course(int stageid) {
+
+    if (stageid==0)
+    {
+        // Line 1
+        lines[0].x0 = 0;
+        lines[0].y0 = 100;
+        lines[0].x1 = 320;
+        lines[0].y1 = 100;
+        lines[0].isVertical = 0;
+        
+        // Line 2
+        lines[1].x0 = 0;
+        lines[1].y0 = 200;
+        lines[1].x1 = 320;
+        lines[1].y1 = 200;
+        lines[1].isVertical = 0;
+    }
+    else if(stageid = 2){}
+
 }
 
 /* Draw course */
@@ -407,7 +431,12 @@ void clear_timer_area() {
 /* Shoot ball with given momentum and angle */
 void shoot_the_ball(int player, int momentum, double angle) {
     if (player < 0 || player >= PLAYER_NUM) return;
+   
     
+    //Clear the ps/2 keyboard fifo to prevent buffered key presses
+    clear_ps2_fifo();
+
+
     // Calculate velocity components
     float speed_factor = 2.0 + (momentum / 20.0);
     balls[player].dx = cosf(angle) * speed_factor;
@@ -437,6 +466,8 @@ void move_ball(int player) {
         
         // Reset count_pause to allow countdown timer to continue
         count_pause = 0;
+
+        run = 1;
         
         return;
     }
@@ -622,11 +653,12 @@ void __attribute__((interrupt)) interrupt_handler() {
     }
     else if (mcause == 22) { // Keyboard interrupt
         volatile unsigned int* ps2 = (volatile unsigned int*)PS2_BASE;
-
-        while (ps2[0] & 0x8000) { // Process all available data
+        
+        // Process all available data
+        while (ps2[0] & 0x8000) {
             unsigned int ps2_data = ps2[0];
             unsigned int data = ps2_data & 0xFF;
-
+            
             if (data == 0xF0) { // Break code
                 break_code = 1;
             }
@@ -645,9 +677,10 @@ void __attribute__((interrupt)) interrupt_handler() {
                         spacebar_pressed = 0;
                     }
                     break_code = 0;
+                    extended_code = 0;  // Also reset extended code
                 }
                 else {  // Key press
-                    if (data == 0x29 && !button_used && !balls[0].isActive) { // Spacebar - only if no active ball
+                    if (data == 0x29 && !button_used && !balls[0].isActive) { // Spacebar
                         spacebar_pressed = 1;
                     }
                     else if (data == 0x6B) { // Left arrow
@@ -656,9 +689,13 @@ void __attribute__((interrupt)) interrupt_handler() {
                     else if (data == 0x74) { // Right arrow
                         led1_on = 1;
                     }
+                    
+                    // Process extended keys here if needed
+                    if (extended_code) {
+                        // Handle extended key codes if necessary
+                        extended_code = 0;
+                    }
                 }
-                
-                extended_code = 0; // Reset extended code flag
             }
         }
         
