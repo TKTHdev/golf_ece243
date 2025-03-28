@@ -57,12 +57,19 @@ typedef struct {
     int id;	
 } Player;
 
+
+/*Course structure*/
+typedef struct {
+    int goal_x, goal_y;
+    Line lines[LINE_NUM];
+} Course;
+
+
 /* Global variables */
 volatile int pixel_buffer_start;
 short int Buffer1[240][512];  // Buffer 1
 short int Buffer2[240][512];  // Buffer 2
 
-Line lines[LINE_NUM]; // Array of lines
 
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
@@ -99,8 +106,8 @@ void config_timer2();
 void draw_attempts(int x, int y, int number, short int number_color, short int border_color);
 void clear_attempts_area();
 void clear_timer_area();
-void move_ball(int player);
-void check_wall_collision(int player);
+void move_ball(int player, Course *course);
+void check_wall_collision(int player, Course *course);
 void shoot_the_ball(int player, int momentum, double angle);
 void display_count(int value);
 void led_update();
@@ -110,6 +117,10 @@ void __attribute__((interrupt)) interrupt_handler();
 void generate_course();
 void draw_course();
 void clear_ps2_fifo();
+
+
+
+Course course;
 
 /* Main function */
 int main(void) {
@@ -162,14 +173,14 @@ int main(void) {
     display_count(count);
 
     // Generate course
-    generate_course(0);
+    generate_course(&course,0);
 
     /* Main game loop */
     while (1) {
         clear_screen();
 
         // Draw course
-        draw_course();
+        draw_course(&course);
         
         // Reset angle after full circle
         if (angle >= 6.28) {
@@ -197,7 +208,7 @@ int main(void) {
         // Update and draw active balls
         for (int i = 0; i < PLAYER_NUM; i++) {
             if (balls[i].isActive) {
-                move_ball(i);
+                move_ball(i, &course);
                 draw_ball(balls[i].x, balls[i].y, balls[i].color);
             }
         }
@@ -266,32 +277,35 @@ void clear_attempts_area() {
 }
 
 /* Generate course */
-void generate_course(int stageid) {
-
-    if (stageid==0)
+void generate_course(Course* course, int course_id) {
+    if (course_id==0)
     {
-        // Line 1
-        lines[0].x0 = 0;
-        lines[0].y0 = 100;
-        lines[0].x1 = 320;
-        lines[0].y1 = 100;
-        lines[0].isVertical = 0;
-        
-        // Line 2
-        lines[1].x0 = 0;
-        lines[1].y0 = 200;
-        lines[1].x1 = 320;
-        lines[1].y1 = 200;
-        lines[1].isVertical = 0;
+        // Line1
+        course->lines[0].x0 = 0;
+        course->lines[0].y0 = 100;
+        course->lines[0].x1 = 320;
+        course->lines[0].y1 = 100;
+        course->lines[0].isVertical = 0;
+
+        //Line 2
+        course->lines[1].x0 = 0;
+        course->lines[1].y0 = 200;
+        course->lines[1].x1 = 320;
+        course->lines[1].y1 = 200;
+        course->lines[1].isVertical = 0;
+
+        course->goal_x = 320;
+        course->goal_y = 100;
+
     }
-    else if(stageid = 2){}
+    else if(course_id = 2){}
 
 }
 
 /* Draw course */
-void draw_course() {
+void draw_course(Course *course) {
     for (int i = 0; i < LINE_NUM; i++) {
-        draw_line(lines[i].x0, lines[i].y0, lines[i].x1, lines[i].y1, 0xFFFF);
+        draw_line(course->lines[i].x0, course->lines[i].y0, course->lines[i].x1, course->lines[i].y1, 0xFFFF);
     }
 }
 
@@ -450,7 +464,7 @@ void shoot_the_ball(int player, int momentum, double angle) {
 }
 
 /* Update ball position and handle collisions */
-void move_ball(int player) {
+void move_ball(int player, Course *course) {
     if (player < 0 || player >= PLAYER_NUM || !balls[player].isActive) return;
 
     // If momentum depleted, stop ball
@@ -504,31 +518,31 @@ void move_ball(int player) {
     balls[player].y = new_y;
 
     // Check for wall collision
-    check_wall_collision(player);
+    check_wall_collision(player, course);
 }
 
 /* Check if the moving ball hit the wall, and if so, bounce */
-void check_wall_collision(int player) {
+void check_wall_collision(int player, Course* course) {
     if (player < 0 || player >= PLAYER_NUM || !balls[player].isActive) return;
     
     float collision_margin = 0.5f; // Add a small margin to avoid getting stuck
     
     // Check if the ball hit any of the course walls
     for (int i = 0; i < LINE_NUM; i++) {
-        if (lines[i].isVertical) {
+        if (course->lines[i].isVertical) {
             // Collision with vertical wall
-            if (balls[player].x + balls[player].radius >= lines[i].x0 - collision_margin && 
-                balls[player].x - balls[player].radius <= lines[i].x0 + collision_margin) {
+            if (balls[player].x + balls[player].radius >= course->lines[i].x0 - collision_margin && 
+                balls[player].x - balls[player].radius <= course->lines[i].x0 + collision_margin) {
                 
                 // Check if ball is within the vertical range of the line
-                if (balls[player].y + balls[player].radius >= lines[i].y0 && 
-                   balls[player].y - balls[player].radius <= lines[i].y1) {
+                if (balls[player].y + balls[player].radius >= course->lines[i].y0 && 
+                   balls[player].y - balls[player].radius <= course->lines[i].y1) {
                     
                     // Move the ball away from the wall to prevent sticking
                     if (balls[player].dx > 0) {
-                        balls[player].x = lines[i].x0 - balls[player].radius - collision_margin;
+                        balls[player].x = course->lines[i].x0 - balls[player].radius - collision_margin;
                     } else {
-                        balls[player].x = lines[i].x0 + balls[player].radius + collision_margin;
+                        balls[player].x = course->lines[i].x0 + balls[player].radius + collision_margin;
                     }
                     
                     // Reverse horizontal velocity with energy loss
@@ -538,18 +552,18 @@ void check_wall_collision(int player) {
         }
         else {
             // Collision with horizontal wall
-            if (balls[player].y + balls[player].radius >= lines[i].y0 - collision_margin && 
-               balls[player].y - balls[player].radius <= lines[i].y0 + collision_margin) {
+            if (balls[player].y + balls[player].radius >= course->lines[i].y0 - collision_margin && 
+               balls[player].y - balls[player].radius <= course->lines[i].y0 + collision_margin) {
                 
                 // Check if ball is within the horizontal range of the line
-                if (balls[player].x + balls[player].radius >= lines[i].x0 && 
-                   balls[player].x - balls[player].radius <= lines[i].x1) {
+                if (balls[player].x + balls[player].radius >= course->lines[i].x0 && 
+                   balls[player].x - balls[player].radius <= course->lines[i].x1) {
                     
                     // Move the ball away from the wall to prevent sticking
                     if (balls[player].dy > 0) {
-                        balls[player].y = lines[i].y0 - balls[player].radius - collision_margin;
+                        balls[player].y = course->lines[i].y0 - balls[player].radius - collision_margin;
                     } else {
-                        balls[player].y = lines[i].y0 + balls[player].radius + collision_margin;
+                        balls[player].y = course->lines[i].y0 + balls[player].radius + collision_margin;
                     }
                     
                     // Reverse vertical velocity with energy loss
