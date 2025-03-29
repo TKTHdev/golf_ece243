@@ -342,7 +342,7 @@ volatile int button_used = 0;         // Button used flag
 volatile float angle = 0.0;           // Current angle
 volatile float angle_increment = 0.05; // Angle change per frame
 volatile int countdown = COUNTDOWN_START; // Countdown timer
-volatile int attempts = COUNTDOWN_START;  // Attempts remaining
+volatile int attempts = 9;  // Attempts remaining
 
 int player_x = 0; // Player x position
 int player_y = 120; // Player y position
@@ -1056,6 +1056,32 @@ void __attribute__((interrupt)) interrupt_handler() {
 /* Draw single digit */
 void draw_digit(int x, int y, int digit, short int color) {
     switch(digit) {
+            case 9:
+            draw_line(x, y, x+8, y, color); // top
+            draw_line(x, y, x, y+6, color); // left upper
+            draw_line(x+8, y, x+8, y+12, color); // right
+            draw_line(x, y+6, x+8, y+6, color); // middle
+            draw_line(x, y+12, x+8, y+12, color); // bottom
+            break;
+        case 8:
+            draw_line(x, y, x+8, y, color); // top
+            draw_line(x, y, x, y+12, color); // left
+            draw_line(x+8, y, x+8, y+12, color); // right
+            draw_line(x, y+6, x+8, y+6, color); // middle
+            draw_line(x, y+12, x+8, y+12, color); // bottom
+            break;
+        case 7:
+            draw_line(x, y, x+8, y, color); // top
+            draw_line(x+8, y, x+8, y+12, color); // right
+            break;
+        case 6:
+            draw_line(x, y, x+8, y, color); // top
+            draw_line(x, y, x, y+12, color); // left
+            draw_line(x, y+6, x+8, y+6, color); // middle
+            draw_line(x+8, y+6, x+8, y+12, color); // right
+            draw_line(x, y+12, x+8, y+12, color); // bottom
+            break;
+
         case 5:
             draw_line(x, y, x+8, y, color);
             draw_line(x, y, x, y+6, color);
@@ -1095,7 +1121,7 @@ void draw_digit(int x, int y, int digit, short int color) {
 
 /* Draw number using digits */
 void draw_number(int x, int y, int number, short int color) {
-    if (number >= 0 && number <= 5) {
+    if (number >= 0 && number <= 9) {
         draw_digit(x, y, number, color);
     }
 }
