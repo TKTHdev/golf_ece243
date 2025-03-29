@@ -71,6 +71,10 @@ short int Buffer1[240][512];  // Buffer 1
 short int Buffer2[240][512];  // Buffer 2
 
 
+/**/
+volatile unsigned int* pixel_ctrl_ptr = (unsigned int*)PIXEL_BUF_CTRL;
+
+
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
 volatile int count = 1;               // Counter (1-100)
