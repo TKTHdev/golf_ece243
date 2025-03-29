@@ -117,7 +117,8 @@ void __attribute__((interrupt)) interrupt_handler();
 void generate_course();
 void draw_course();
 void clear_ps2_fifo();
-
+void start_game();
+void init();
 
 
 
