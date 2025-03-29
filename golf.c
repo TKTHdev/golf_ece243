@@ -71,10 +71,6 @@ short int Buffer1[240][512];  // Buffer 1
 short int Buffer2[240][512];  // Buffer 2
 
 
-/**/
-volatile unsigned int* pixel_ctrl_ptr = (unsigned int*)PIXEL_BUF_CTRL;
-
-
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
 volatile int count = 1;               // Counter (1-100)
@@ -121,92 +117,76 @@ void __attribute__((interrupt)) interrupt_handler();
 void generate_course();
 void draw_course();
 void clear_ps2_fifo();
-void start_game();
-void init();
+
 
 
 
 /* Main function */
 int main(void) {
+    volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
+    
+    // Setup interrupt handling
+    unsigned int mstatus_value = 8;  // MIE bit = 1
+    unsigned int mie_value = 0x430000;  // Timer2 interrupt - IRQ 17, 16, and 22
+    unsigned int mtvec_value = (unsigned int)&interrupt_handler;
+    
+    // Initialize double buffering
+    *(pixel_ctrl_ptr + 1) = (int)Buffer1;
+    wait_for_vsync();
+    pixel_buffer_start = *pixel_ctrl_ptr;
+    clear_screen();
+    *(pixel_ctrl_ptr + 1) = (int)Buffer2;
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+    clear_screen();
 
 
-    // Initialize hardware
-    init();
+
+
+
+    
+    // Initialize ball
+    for (int i = 0; i < PLAYER_NUM; i++) {
+        balls[i].x = player_x;
+        balls[i].y = player_y;
+        balls[i].radius = BALL_SIZE;
+        balls[i].color = 0x6666;
+        balls[i].isActive = 0;
+        balls[i].dx = 0;
+        balls[i].dy = 0;
+        balls[i].momentum = 0;
+    }
+    
+    // Reset displays and LEDs
+    volatile unsigned int* hex3_hex0 = (volatile unsigned int*)HEX3_HEX0_BASE;
+    volatile unsigned int* hex5_hex4 = (volatile unsigned int*)HEX5_HEX4_BASE;
+    volatile unsigned int* leds = (volatile unsigned int*)LED_BASE;
+    *hex3_hex0 = 0; 
+    *hex5_hex4 = 0;
+    *leds = 0;
+    
+    // Configure hardware
+    config_timer();
+    config_timer2();
+    config_ps2();
+    
+    // Set up interrupt registers
+    __asm__ volatile ("csrw mstatus, %0" :: "r"(mstatus_value));
+    __asm__ volatile ("csrw mie, %0" :: "r"(mie_value));
+    __asm__ volatile ("csrw mtvec, %0" :: "r"(mtvec_value));
+    
+    display_count(count);
 
     // Generate course
     Course course;
     generate_course(&course,0);
 
     /* Main game loop */
-
-    start_game(course);
-}
-
-/* Timer 2 configuration */
-void config_timer2() {
-    volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
-    int delay = 100000000;  // 1s at 100 MHz
-    timer[2] = delay & 0xFFFF;
-    timer[3] = (delay >> 16) & 0xFFFF;
-    timer[1] = 7;  // START, CONT, ITO
-}
-
-/* Function to clear the PS/2 keyboard FIFO */
-void clear_ps2_fifo() {
-    volatile unsigned int* ps2 = (volatile unsigned int*)PS2_BASE;
-    
-    // Read and discard all data in the FIFO until it's empty
-    while (ps2[0] & 0x8000) {
-        unsigned int dummy_read = ps2[0];
-        // Just read to clear the buffer, no need to process
-    }
-}
-
-
-/* Clear attempts display area */
-void clear_attempts_area() {
-    for (int x = ATTEMPTS_X - 9; x < ATTEMPTS_X + 25; x++) {
-        for (int y = ATTEMPTS_Y - 9; y < ATTEMPTS_Y + 29; y++) {
-            if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
-                plot_pixel(x, y, 0x0000);
-            }
-        }
-    }
-}
-
-/* Generate course */
-void generate_course(Course* course, int course_id) {
-    if (course_id==0)
-    {
-        // Line1
-        course->lines[0].x0 = 0;
-        course->lines[0].y0 = 100;
-        course->lines[0].x1 = 320;
-        course->lines[0].y1 = 100;
-        course->lines[0].isVertical = 0;
-
-        //Line 2
-        course->lines[1].x0 = 0;
-        course->lines[1].y0 = 200;
-        course->lines[1].x1 = 320;
-        course->lines[1].y1 = 200;
-        course->lines[1].isVertical = 0;
-
-        course->goal_x = 320;
-        course->goal_y = 150;
-
-    }
-    else if(course_id = 2){}
-
-}
-
-
-void start_game(course){
+    while (1) {
         clear_screen();
 
         // Draw course
         draw_course(&course);
-
+        
         // Reset angle after full circle
         if (angle >= 6.28) {
             angle = 0.0;
@@ -266,65 +246,64 @@ void start_game(course){
         clear_ps2_fifo();
 
         printf("led0: %d, led1: %d\n", led0_on, led1_on);
+    }
+}
 
+/* Timer 2 configuration */
+void config_timer2() {
+    volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
+    int delay = 100000000;  // 1s at 100 MHz
+    timer[2] = delay & 0xFFFF;
+    timer[3] = (delay >> 16) & 0xFFFF;
+    timer[1] = 7;  // START, CONT, ITO
+}
+
+/* Function to clear the PS/2 keyboard FIFO */
+void clear_ps2_fifo() {
+    volatile unsigned int* ps2 = (volatile unsigned int*)PS2_BASE;
+    
+    // Read and discard all data in the FIFO until it's empty
+    while (ps2[0] & 0x8000) {
+        unsigned int dummy_read = ps2[0];
+        // Just read to clear the buffer, no need to process
+    }
 }
 
 
-
-/*Init*/
-void init(){
-    volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
-    
-    // Setup interrupt handling
-    unsigned int mstatus_value = 8;  // MIE bit = 1
-    unsigned int mie_value = 0x430000;  // Timer2 interrupt - IRQ 17, 16, and 22
-    unsigned int mtvec_value = (unsigned int)&interrupt_handler;
-    
-    // Initialize double buffering
-    *(pixel_ctrl_ptr + 1) = (int)Buffer1;
-    wait_for_vsync();
-    pixel_buffer_start = *pixel_ctrl_ptr;
-    clear_screen();
-    *(pixel_ctrl_ptr + 1) = (int)Buffer2;
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
-    clear_screen();
-
-
-
-
-
-    
-    // Initialize ball
-    for (int i = 0; i < PLAYER_NUM; i++) {
-        balls[i].x = player_x;
-        balls[i].y = player_y;
-        balls[i].radius = BALL_SIZE;
-        balls[i].color = 0x6666;
-        balls[i].isActive = 0;
-        balls[i].dx = 0;
-        balls[i].dy = 0;
-        balls[i].momentum = 0;
+/* Clear attempts display area */
+void clear_attempts_area() {
+    for (int x = ATTEMPTS_X - 9; x < ATTEMPTS_X + 25; x++) {
+        for (int y = ATTEMPTS_Y - 9; y < ATTEMPTS_Y + 29; y++) {
+            if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
+                plot_pixel(x, y, 0x0000);
+            }
+        }
     }
-    
-    // Reset displays and LEDs
-    volatile unsigned int* hex3_hex0 = (volatile unsigned int*)HEX3_HEX0_BASE;
-    volatile unsigned int* hex5_hex4 = (volatile unsigned int*)HEX5_HEX4_BASE;
-    volatile unsigned int* leds = (volatile unsigned int*)LED_BASE;
-    *hex3_hex0 = 0; 
-    *hex5_hex4 = 0;
-    *leds = 0;
-    
-    // Configure hardware
-    config_timer();
-    config_timer2();
-    config_ps2();
-    
-    // Set up interrupt registers
-    __asm__ volatile ("csrw mstatus, %0" :: "r"(mstatus_value));
-    __asm__ volatile ("csrw mie, %0" :: "r"(mie_value));
-    __asm__ volatile ("csrw mtvec, %0" :: "r"(mtvec_value));
-    
-    display_count(count);
+}
+
+/* Generate course */
+void generate_course(Course* course, int course_id) {
+    if (course_id==0)
+    {
+        // Line1
+        course->lines[0].x0 = 0;
+        course->lines[0].y0 = 100;
+        course->lines[0].x1 = 320;
+        course->lines[0].y1 = 100;
+        course->lines[0].isVertical = 0;
+
+        //Line 2
+        course->lines[1].x0 = 0;
+        course->lines[1].y0 = 200;
+        course->lines[1].x1 = 320;
+        course->lines[1].y1 = 200;
+        course->lines[1].isVertical = 0;
+
+        course->goal_x = 320;
+        course->goal_y = 150;
+
+    }
+    else if(course_id = 2){}
 
 }
 
