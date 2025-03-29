@@ -440,10 +440,12 @@ int main(void) {
     generate_course(&course,0);
 
 
+    draw_startpage();
 
     for(;;){
         if(clear_screen_flag)break;
-        draw_startpage();
+        printf("%d\n",clear_screen_flag);
+        wait_for_vsync();
     }
 
 
@@ -572,6 +574,15 @@ void draw_startpage(void) {
     *(pixel_ctrl_ptr + 1) = (int)Buffer2;
     wait_for_vsync();
     pixel_buffer_start_for_front = (uint16_t *)Buffer2;
+
+    // Draw the 320x240 image (16-bit 5-6-5 RGB)
+    pixel_index = 0;
+    for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
+        for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
+            pixel_buffer_start_for_front[y * 512 + x] = golfthisone[pixel_index++]; // Use correct stride (512)
+        }
+    }
+
 }
 
 
