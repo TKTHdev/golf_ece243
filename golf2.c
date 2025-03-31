@@ -1,24 +1,24 @@
+/**
+ * Golf Game for Embedded System
+ * 
+ * This program implements a simple golf game on an embedded system with
+ * a VGA display, PS/2 keyboard, LEDs, and 7-segment displays.
+ * 
+ * The game allows the player to aim and shoot a golf ball toward a goal,
+ * with obstacles in the way. The player has a limited number of attempts
+ * to reach the goal.
+ */
+
 #include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <stdbool.h>
 
-/* Hardware Addresses */
+/*******************************************************************************
+ * Hardware Addresses for the Embedded System
+ ******************************************************************************/
 #define HEX3_HEX0_BASE  0xFF200020  // 7-segment display HEX3 - HEX0
-#define HEX5_HEX4_BASE  0xFF200030  // 7-segment display HEX5 and HEX4
-#define TIMER_BASE      0xFF202000  // Timer
-#define PS2_BASE        0xFF200100  // Keyboard
-#define LED_BASE        0xFF200000  // LEDs
-#define PIXEL_BUF_CTRL  0xFF203020  // Pixel buffer controller
-#define TIMER2_BASE     0xFF202020  // Timer 2
-
-/* Game Settings */
-#define COUNTDOWN_START 5
-#define TIMER_X        (SCREEN_WIDTH - 20)  // Top right corner
-#define TIMER_Y        10
-#define ATTEMPTS_X     (SCREEN_WIDTH - 20)  // Bottom right corner
 #define ATTEMPTS_Y     (SCREEN_HEIGHT - 20)
 #define BALL_SIZE      4               // Ball radius
 #define SCREEN_WIDTH   320             // Screen width

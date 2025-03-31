@@ -651,8 +651,6 @@ int main(void) {
     
     // Initialize ball
     for (int i = 0; i < PLAYER_NUM; i++) {
-        balls[i].x = player_x;
-        balls[i].y = player_y;
         balls[i].radius = BALL_SIZE;
         balls[i].color = 0x6666;
         balls[i].isActive = 0;
@@ -891,8 +889,135 @@ void generate_course(Course* course, int course_id) {
         course->goal_x = 320;
         course->goal_y = 150;
 
+        balls[0].x = 0;
+        balls[0].y = 120;
+
     }
-    else if(course_id = 2){}
+    else if(course_id == 1) {
+        // 上側の壁
+        course->lines[0].x0 = 0;
+        course->lines[0].y0 = 0;
+        course->lines[0].x1 = 320;
+        course->lines[0].y1 = 0;
+        course->lines[0].isVertical = 0;
+        
+        // 下側の壁
+        course->lines[1].x0 = 0;
+        course->lines[1].y0 = 240;
+        course->lines[1].x1 = 320;
+        course->lines[1].y1 = 240;
+        course->lines[1].isVertical = 0;
+        
+        // 左垂直線（スタート近く）
+        course->lines[2].x0 = 40;
+        course->lines[2].y0 = 20;
+        course->lines[2].x1 = 40;
+        course->lines[2].y1 = 60;
+        course->lines[2].isVertical = 1;
+        
+        // 水平線 1
+        course->lines[3].x0 = 40;
+        course->lines[3].y0 = 60;
+        course->lines[3].x1 = 80;
+        course->lines[3].y1 = 60;
+        course->lines[3].isVertical = 0;
+        
+        // 垂直線 2
+        course->lines[4].x0 = 80;
+        course->lines[4].y0 = 60;
+        course->lines[4].x1 = 80;
+        course->lines[4].y1 = 100;
+        course->lines[4].isVertical = 1;
+        
+        // 水平線 2
+        course->lines[5].x0 = 80;
+        course->lines[5].y0 = 100;
+        course->lines[5].x1 = 120;
+        course->lines[5].y1 = 100;
+        course->lines[5].isVertical = 0;
+        
+        // 以下、図に従って迷路パターンを続ける
+        // 垂直線 3
+        course->lines[6].x0 = 120;
+        course->lines[6].y0 = 100;
+        course->lines[6].x1 = 120;
+        course->lines[6].y1 = 140;
+        course->lines[6].isVertical = 1;
+        
+        // 水平線 3
+        course->lines[7].x0 = 120;
+        course->lines[7].y0 = 140;
+        course->lines[7].x1 = 160;
+        course->lines[7].y1 = 140;
+        course->lines[7].isVertical = 0;
+        
+        // 垂直線 4
+        course->lines[8].x0 = 160;
+        course->lines[8].y0 = 140;
+        course->lines[8].x1 = 160;
+        course->lines[8].y1 = 180;
+        course->lines[8].isVertical = 1;
+        
+        // 水平線 4
+        course->lines[9].x0 = 160;
+        course->lines[9].y0 = 180;
+        course->lines[9].x1 = 200;
+        course->lines[9].y1 = 180;
+        course->lines[9].isVertical = 0;
+        
+        // 垂直線 5
+        course->lines[10].x0 = 200;
+        course->lines[10].y0 = 180;
+        course->lines[10].x1 = 200;
+        course->lines[10].y1 = 140;
+        course->lines[10].isVertical = 1;
+        
+        // 水平線 5
+        course->lines[11].x0 = 200;
+        course->lines[11].y0 = 140;
+        course->lines[11].x1 = 240;
+        course->lines[11].y1 = 140;
+        course->lines[11].isVertical = 0;
+        
+        // 垂直線 6
+        course->lines[12].x0 = 240;
+        course->lines[12].y0 = 140;
+        course->lines[12].x1 = 240;
+        course->lines[12].y1 = 100;
+        course->lines[12].isVertical = 1;
+        
+        // 水平線 6
+        course->lines[13].x0 = 240;
+        course->lines[13].y0 = 100;
+        course->lines[13].x1 = 280;
+        course->lines[13].y1 = 100;
+        course->lines[13].isVertical = 0;
+        
+        // 垂直線 7（ゴール近く）
+        course->lines[14].x0 = 280;
+        course->lines[14].y0 = 100;
+        course->lines[14].x1 = 280;
+        course->lines[14].y1 = 60;
+        course->lines[14].isVertical = 1;
+        
+        // 水平線 7（ゴール手前）
+        course->lines[15].x0 = 280;
+        course->lines[15].y0 = 60;
+        course->lines[15].x1 = 320;
+        course->lines[15].y1 = 60;
+        course->lines[15].isVertical = 0;
+        
+        // ゴール位置設定
+        course->goal_x = 320;
+        course->goal_y = 20;
+        
+        // ボールのスタート位置
+        balls[0].x = 0;
+        balls[0].y = 20;
+    }
+
+    else if(course_id =2){}
+
 
 }
 
