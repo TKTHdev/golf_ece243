@@ -1177,8 +1177,13 @@ void check_wall_collision(int player, Course* course) {
                 balls[player].x - balls[player].radius <= course->lines[i].x0 + collision_margin) {
                 
                 // Check if ball is within the vertical range of the line
-                if (balls[player].y + balls[player].radius >= course->lines[i].y0 && 
-                   balls[player].y - balls[player].radius <= course->lines[i].y1) {
+                // Handle both cases: y0 <= y1 and y0 > y1
+                if ((course->lines[i].y0 <= course->lines[i].y1 && 
+                     balls[player].y + balls[player].radius >= course->lines[i].y0 &&
+                     balls[player].y - balls[player].radius <= course->lines[i].y1) ||
+                    (course->lines[i].y0 > course->lines[i].y1 && 
+                     balls[player].y + balls[player].radius >= course->lines[i].y1 &&
+                     balls[player].y - balls[player].radius <= course->lines[i].y0)) {
                     
                     // Move the ball away from the wall to prevent sticking
                     if (balls[player].dx > 0) {
