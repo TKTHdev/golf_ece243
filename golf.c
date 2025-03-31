@@ -590,8 +590,8 @@ volatile int attempts = 9;  // Attempts remaining
 
 
 
-int player_x = 0; // Player x position
-int player_y = 120; // Player y position
+int player_x ; // Player x position
+int player_y ; // Player y position
 
 volatile int count_pause = 0; // Pause counter for countdown timer
 
@@ -681,7 +681,7 @@ int main(void) {
 
     // Generate course
     Course course;
-    generate_course(&course,0);
+    generate_course(&course,1);
 
 
     draw_startpage();
@@ -889,13 +889,30 @@ void generate_course(Course* course, int course_id) {
         course->goal_x = 320;
         course->goal_y = 150;
 
-        balls[0].x = 0;
-        balls[0].y = 120;
+        player_x = 0;
+        player_y = 120;
 
     }
     else if(course_id == 1) {
-        
-    }
+        int x0[LINE_NUM] = {0, 0, 80, 40, 40, 80, 0, 240, 280};
+        int y0[LINE_NUM] = {40, 80, 40, 80, 240, 200, 240, 200, 240};
+        int x1[LINE_NUM] = {80, 40, 80, 40, 280, 240, 280, 240, 280};
+        int y1[LINE_NUM] = {40, 80, 200, 240, 240, 200, 240, 0, 0};
+        int isVertical[LINE_NUM] = {0, 0, 1, 1, 0, 0, 0, 1, 1};
+
+        for (int i = 0; i < LINE_NUM; i++) {
+            course->lines[i].x0 = x0[i];
+            course->lines[i].y0 = y0[i];
+            course->lines[i].x1 = x1[i];
+            course->lines[i].y1 = y1[i];
+            course->lines[i].isVertical = isVertical[i];
+        }
+        course->goal_x = 260;
+        course->goal_y = 20;
+
+        player_x = 0;
+        player_y = 60;
+    }   
 
     else if(course_id =2){}
 
