@@ -583,7 +583,7 @@ volatile int break_code = 0;          // PS/2 break code flag
 volatile int extended_code = 0;       // PS/2 extended code flag
 volatile int button_used = 0;         // Button used flag
 volatile float angle = 0.0;           // Current angle
-volatile float angle_increment = 0.05; // Angle change per frame
+volatile float angle_increment = 0.1; // Angle change per frame
 volatile int countdown = COUNTDOWN_START; // Countdown timer
 volatile int attempts = 9;  // Attempts remaining
 
