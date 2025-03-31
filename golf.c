@@ -681,7 +681,7 @@ int main(void) {
 
     // Generate course
     Course course;
-    generate_course(&course,1);
+    generate_course(&course,2);
 
 
     draw_startpage();
@@ -870,6 +870,7 @@ void draw_finishpage(void) {
 
 /* Generate course */
 void generate_course(Course* course, int course_id) {
+    int line_index = 0;
     if (course_id==0)
     {
         // Line1
@@ -914,7 +915,81 @@ void generate_course(Course* course, int course_id) {
         player_y = 60;
     }   
 
-    else if(course_id =2){}
+    else if(course_id =2){
+    // Snake track with screen-edge connections
+
+        // 2nd horizontal from top
+        course->lines[line_index].x0 = 0;
+        course->lines[line_index].y0 = 100;
+        course->lines[line_index].x1 = 150;
+        course->lines[line_index].y1 = 100;
+        course->lines[line_index].isVertical = 0;
+        line_index++;
+
+        // bottom horizontal2
+        course->lines[line_index].x0 = 200;
+        course->lines[line_index].y0 = 150;
+        course->lines[line_index].x1 = 320;
+        course->lines[line_index].y1 = 150;
+        course->lines[line_index].isVertical = 0;
+        line_index++;
+
+        // vertical right
+        course->lines[line_index].x0 = 150;
+        course->lines[line_index].y0 = 100;
+        course->lines[line_index].x1 = 150;
+        course->lines[line_index].y1 = 150;
+        course->lines[line_index].isVertical = 1;
+        line_index++;
+
+        // vertical right2
+        course->lines[line_index].x0 = 200;
+        course->lines[line_index].y0 = 50;
+        course->lines[line_index].x1 = 200;
+        course->lines[line_index].y1 = 150;
+        course->lines[line_index].isVertical = 1;
+        line_index++;
+
+        // 2nd horizontal line from bottom
+        course->lines[line_index].x0 = 50;
+        course->lines[line_index].y0 = 150;
+        course->lines[line_index].x1 = 150;
+        course->lines[line_index].y1 = 150;
+        course->lines[line_index].isVertical = 0;
+        line_index++;
+
+        // top horizontal first
+        course->lines[line_index].x0 = 0;
+        course->lines[line_index].y0 = 50;
+        course->lines[line_index].x1 = 200;
+        course->lines[line_index].y1 = 50;
+        course->lines[line_index].isVertical = 0;
+        line_index++;
+
+        // first vertical left
+        course->lines[line_index].x0 = 50;
+        course->lines[line_index].y0 = 150;
+        course->lines[line_index].x1 = 50;
+        course->lines[line_index].y1 = 200;
+        course->lines[line_index].isVertical = 1;
+        line_index++;
+
+        // bottom horizontal line
+        course->lines[line_index].x0 = 50;
+        course->lines[line_index].y0 = 200;
+        course->lines[line_index].x1 = 319;
+        course->lines[line_index].y1 = 200;
+        course->lines[line_index].isVertical = 0;
+        line_index++;
+
+        // Goal at right edge
+        course->goal_x = 300;
+        course->goal_y = 170;
+
+        // Start at left edge
+        player_x = 10;
+        player_y = 70;
+    }
 
 
 }
@@ -1081,7 +1156,7 @@ void shoot_the_ball(int player, int momentum, double angle) {
     balls[player].dy = sinf(angle) * speed_factor;
     balls[player].momentum = momentum/2;
     balls[player].isActive = 1;
-    
+     
     // Use current player position as starting point
     balls[player].x = player_x;
     balls[player].y = player_y;
