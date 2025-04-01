@@ -1065,6 +1065,44 @@ int main(void) {
 
 }
 
+void draw_finishpage(void) {
+    int pixel_index = 0;
+    int score = 9 - attempts;
+    // Set pixel buffer to Buffer1
+    *(pixel_ctrl_ptr + 1) = (int)Buffer1;
+    wait_for_vsync();
+    pixel_buffer_start_for_front = (uint16_t *)Buffer1;  // Assign pointer
+  
+    // Draw the 320x240 image (16-bit 5-6-5 RGB)
+    for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
+      for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
+        pixel_buffer_start_for_front[y * 512 + x] = finish[pixel_index++];
+      }
+    }
+    // Swap to Buffer2
+    *(pixel_ctrl_ptr + 1) = (int)Buffer2;
+    wait_for_vsync();
+    pixel_buffer_start_for_front = (uint16_t *)Buffer2;
+  
+    // Draw the the finish page
+    pixel_index = 0;
+    for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
+      for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
+        pixel_buffer_start_for_front[y * 512 + x] = finish[pixel_index++];
+      }
+    }
+  
+    *(pixel_ctrl_ptr + 1) = (int)Buffer1;
+    wait_for_vsync();
+    pixel_buffer_start = *pixel_ctrl_ptr;
+    draw_digit(160, 135, score, 0xFFFF);
+  
+    *(pixel_ctrl_ptr + 1) = (int)Buffer2;
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
+    draw_digit(160, 135, score, 0xFFFF);
+  }
+
+
 /* Timer 2 configuration */
 void config_timer2() {
     volatile unsigned int* timer = (volatile unsigned int*)TIMER2_BASE;
@@ -1162,31 +1200,6 @@ void draw_lost(void) {
 }
 
 
-void draw_lost(void) {
-  int pixel_index = 0;
-  *(pixel_ctrl_ptr + 1) = (int)Buffer1;
-  wait_for_vsync();
-  pixel_buffer_start_for_front = (uint16_t *)Buffer1;  // Assign pointer
-
-  // Draw the 320x240 image (16-bit 5-6-5 RGB)
-  for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
-    for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
-      pixel_buffer_start_for_front[y * 512 + x] = lost_round[pixel_index++];
-    }
-  }
-  // Swap to Buffer2
-  *(pixel_ctrl_ptr + 1) = (int)Buffer2;
-  wait_for_vsync();
-  pixel_buffer_start_for_front = (uint16_t *)Buffer2;
-
-  // Draw the the finish page
-  pixel_index = 0;
-  for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
-    for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
-      pixel_buffer_start_for_front[y * 512 + x] = lost_round[pixel_index++];
-    }
-  }
-}
 
 
 
