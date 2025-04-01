@@ -593,6 +593,11 @@ volatile int attempts = 9;  // Attempts remaining
 int player_x ; // Player x position
 int player_y ; // Player y position
 
+
+
+//couse id: increment everytime you clear the course
+int course_id = 0;
+
 volatile int count_pause = 0; // Pause counter for countdown timer
 
 Ball balls[PLAYER_NUM];
@@ -628,6 +633,9 @@ void draw_startpage(void);
 
 /* Main function */
 int main(void) {
+
+    start:
+
     volatile int * pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
     
     // Setup interrupt handling
@@ -669,7 +677,6 @@ int main(void) {
     
     // Configure hardware
     config_timer();
-    config_timer2();
     config_ps2();
     
     // Set up interrupt registers
@@ -679,22 +686,28 @@ int main(void) {
     
     display_count(count);
 
-    // Generate course
-    Course course;
-    generate_course(&course,2);
 
 
     draw_startpage();
 
     for(;;){
-        if(clear_screen_flag)break;
-        printf("%d\n",clear_screen_flag);
+        if(clear_screen_flag){
+            clear_screen_flag = 0;
+            printf("YOOOOOOOOOOOOOOOOOOOOoo%d\n",clear_screen_flag);
+            break;
+        }
         wait_for_vsync();
     }
 
-
+    game:
+    //generate course
+    Course course;
+    generate_course(&course,course_id);
+    config_timer2();
     /* Main game loop */
     while (1) {
+
+        //rpint the clear screen flag
 
         clear_screen();
 
@@ -764,6 +777,8 @@ int main(void) {
         if(game_finished){
             clear_screen();
             draw_finishpage();
+            game_finished = 0;
+            clear_screen_flag = 0; 
             break;
         }
     }
@@ -771,6 +786,17 @@ int main(void) {
     while(true)
     {
         wait_for_vsync();
+        if(clear_screen_flag)
+        {
+            if(course_id ==2)
+            {
+                course_id = 0;
+                goto start;
+            }else{
+                course_id++;
+                goto game;
+            }
+        }
     }
 }
 
@@ -781,6 +807,7 @@ void config_timer2() {
     timer[2] = delay & 0xFFFF;
     timer[3] = (delay >> 16) & 0xFFFF;
     timer[1] = 7;  // START, CONT, ITO
+    count_pause = 0;
 }
 
 /* Function to clear the PS/2 keyboard FIFO */
@@ -871,6 +898,16 @@ void draw_finishpage(void) {
 /* Generate course */
 void generate_course(Course* course, int course_id) {
     int line_index = 0;
+
+    // Initialize course lines
+    for (int i = 0; i < LINE_NUM; i++) {
+        course->lines[i].x0 = 0;
+        course->lines[i].y0 = 0;
+        course->lines[i].x1 = 0;
+        course->lines[i].y1 = 0;
+        course->lines[i].isVertical = 0;
+    }
+
     if (course_id==0)
     {
         // Line1
@@ -916,6 +953,9 @@ void generate_course(Course* course, int course_id) {
     }   
 
     else if(course_id =2){
+
+
+
     // Snake track with screen-edge connections
 
         // 2nd horizontal from top
@@ -1225,7 +1265,7 @@ void move_ball(int player, Course *course) {
         balls[player].x = player_x;
         balls[player].y = player_y;
         button_used = 0;
-        count_pause = 0;
+        count_pause = 1;
         run = 1;
         attempts = COUNTDOWN_START;
         game_finished = true;
@@ -1403,6 +1443,12 @@ void __attribute__((interrupt)) interrupt_handler() {
             }
             else {
                 if (break_code) {  // Key release
+
+                    if(data == 0x5A){
+                        printf("hello world");
+                        clear_screen_flag = false;
+                    }
+
                     if (data == 0x6B) {  // Left arrow
                         led0_on = 0;
                     }
