@@ -864,7 +864,7 @@ volatile int countdown = COUNTDOWN_START; // Countdown timer
 volatile int attempts = 9;  // Attempts remaining
 
 
-
+Course course; // Course structure
 
 int player_x ; // Player x position
 int player_y ; // Player y position
@@ -928,7 +928,7 @@ int main(void) {
     pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     clear_screen();
     
-    // Initialize ball
+
     for (int i = 0; i < PLAYER_NUM; i++) {
         balls[i].radius = BALL_SIZE;
         balls[i].color = 0x6666;
@@ -937,6 +937,8 @@ int main(void) {
         balls[i].dy = 0;
         balls[i].momentum = 0;
     }
+
+
     
     // Reset displays and LEDs
     volatile unsigned int* hex3_hex0 = (volatile unsigned int*)HEX3_HEX0_BASE;
@@ -972,9 +974,14 @@ int main(void) {
 
     game:
     //generate course
-    Course course;
     generate_course(&course,course_id);
+    balls[0].x = player_x;
+    balls[0].y = player_y;
     config_timer2();
+
+    // Initialize ball
+
+
     /* Main game loop */
     while (1) {
 
@@ -1005,7 +1012,6 @@ int main(void) {
             count_pause = 1;
             // Don't update player position here - wait until ball stops
         }
-
 
         printf("momentum: %d\n", balls[0].momentum);
 
@@ -1243,6 +1249,10 @@ void generate_course(Course* course, int course_id) {
         course->lines[i].x1 = 0;
         course->lines[i].y1 = 0;
         course->lines[i].isVertical = 0;
+        
+        player_x = 0;
+        player_y = 0;
+
     }
 
     if (course_id==0)
