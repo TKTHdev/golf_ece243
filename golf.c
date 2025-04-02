@@ -4,28 +4,28 @@
 #include <stdlib.h>
 
 /* Hardware Addresses */
-#define HEX3_HEX0_BASE 0xFF200020 // 7-segment display HEX3 - HEX0
-#define HEX5_HEX4_BASE 0xFF200030 // 7-segment display HEX5 and HEX4
-#define TIMER_BASE 0xFF202000     // Timer
-#define PS2_BASE 0xFF200100       // Keyboard
-#define LED_BASE 0xFF200000       // LEDs
-#define PIXEL_BUF_CTRL 0xFF203020 // Pixel buffer controller
-#define TIMER2_BASE 0xFF202020    // Timer 2
+#define HEX3_HEX0_BASE 0xFF200020  // 7-segment display HEX3 - HEX0
+#define HEX5_HEX4_BASE 0xFF200030  // 7-segment display HEX5 and HEX4
+#define TIMER_BASE 0xFF202000      // Timer
+#define PS2_BASE 0xFF200100        // Keyboard
+#define LED_BASE 0xFF200000        // LEDs
+#define PIXEL_BUF_CTRL 0xFF203020  // Pixel buffer controller
+#define TIMER2_BASE 0xFF202020     // Timer 2
 
-#define GOLFTHISONE_WIDTH 320  // Width of the image
-#define GOLFTHISONE_HEIGHT 240 // Height of the image
+#define GOLFTHISONE_WIDTH 320   // Width of the image
+#define GOLFTHISONE_HEIGHT 240  // Height of the image
 
 /* Game Settings */
 #define COUNTDOWN_START 5
-#define TIMER_X (SCREEN_WIDTH - 20) // Top right corner
+#define TIMER_X (SCREEN_WIDTH - 20)  // Top right corner
 #define TIMER_Y 10
-#define ATTEMPTS_X (SCREEN_WIDTH - 20) // Bottom right corner
+#define ATTEMPTS_X (SCREEN_WIDTH - 20)  // Bottom right corner
 #define ATTEMPTS_Y (SCREEN_HEIGHT - 20)
-#define BALL_SIZE 4       // Ball radius
-#define SCREEN_WIDTH 320  // Screen width
-#define SCREEN_HEIGHT 240 // Screen height
-#define LINE_NUM 100      // Number of lines in the course
-#define PLAYER_NUM 1      // Number of players
+#define BALL_SIZE 4        // Ball radius
+#define SCREEN_WIDTH 320   // Screen width
+#define SCREEN_HEIGHT 240  // Screen height
+#define LINE_NUM 100       // Number of lines in the course
+#define PLAYER_NUM 1       // Number of players
 
 /*bool*/
 typedef int bool;
@@ -12589,11 +12589,10 @@ struct audio_t *const audiop = ((struct audio_t *)0xff203040);
 
 void audio_playback_mono(int *samples, int n) {
   int i;
-  audiop->control = 0x8; // Clear FIFOs
-  audiop->control = 0x0; // Resume
+  audiop->control = 0x8;  // Clear FIFOs
+  audiop->control = 0x0;  // Resume
   for (i = 0; i < n; i++) {
-    while (audiop->warc == 0)
-      ; // Wait for FIFO space
+    while (audiop->warc == 0);  // Wait for FIFO space
     audiop->ldata = samples[i];
     audiop->rdata = samples[i];
   }
@@ -12605,12 +12604,12 @@ const uint8_t SEVEN_SEG[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66,
 
 /* Ball structure */
 typedef struct {
-  int x, y;     // Position
-  int radius;   // Radius
-  int color;    // Color
-  int dx, dy;   // Velocity
-  int isActive; // Active flag
-  int momentum; // Power
+  int x, y;      // Position
+  int radius;    // Radius
+  int color;     // Color
+  int dx, dy;    // Velocity
+  int isActive;  // Active flag
+  int momentum;  // Power
 } Ball;
 
 /* Line structure */
@@ -38241,35 +38240,35 @@ typedef struct {
 
 /* Global variables */
 volatile int pixel_buffer_start;
-short int Buffer1[240][512]; // Buffer 1
-short int Buffer2[240][512]; // Buffer 2
+short int Buffer1[240][512];  // Buffer 1
+short int Buffer2[240][512];  // Buffer 2
 
-volatile uint16_t *pixel_buffer_start_for_front; // Pointer to pixel buffer
+volatile uint16_t *pixel_buffer_start_for_front;  // Pointer to pixel buffer
 
 volatile float cos_val = 1.0;
 volatile float sin_val = 0.0;
-volatile int count = 1;                   // Counter (1-100)
-volatile int run = 1;                     // Counter run flag
-volatile int led0_on = 0;                 // LED0 state
-volatile int led1_on = 0;                 // LED1 state
-volatile int spacebar_pressed = 0;        // Spacebar state
-volatile int break_code = 0;              // PS/2 break code flag
-volatile int extended_code = 0;           // PS/2 extended code flag
-volatile int button_used = 0;             // Button used flag
-volatile float angle = 0.0;               // Current angle
-volatile float angle_increment = 0.1;     // Angle change per frame
-volatile int countdown = COUNTDOWN_START; // Countdown timer
-volatile int attempts = 9;                // Attempts remaining
+volatile int count = 1;                    // Counter (1-100)
+volatile int run = 1;                      // Counter run flag
+volatile int led0_on = 0;                  // LED0 state
+volatile int led1_on = 0;                  // LED1 state
+volatile int spacebar_pressed = 0;         // Spacebar state
+volatile int break_code = 0;               // PS/2 break code flag
+volatile int extended_code = 0;            // PS/2 extended code flag
+volatile int button_used = 0;              // Button used flag
+volatile float angle = 0.0;                // Current angle
+volatile float angle_increment = 0.1;      // Angle change per frame
+volatile int countdown = COUNTDOWN_START;  // Countdown timer
+volatile int attempts = 9;                 // Attempts remaining
 
-Course course; // Course structure
+Course course;  // Course structure
 
-int player_x; // Player x position
-int player_y; // Player y position
+int player_x;  // Player x position
+int player_y;  // Player y position
 
 // couse id: increment everytime you clear the course
 int course_id = 0;
 
-volatile int count_pause = 0; // Pause counter for countdown timer
+volatile int count_pause = 0;  // Pause counter for countdown timer
 
 Ball balls[PLAYER_NUM];
 
@@ -38303,14 +38302,13 @@ void draw_startpage(void);
 
 /* Main function */
 int main(void) {
-
 start:
 
   volatile int *pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
 
   // Setup interrupt handling
-  unsigned int mstatus_value = 8;    // MIE bit = 1
-  unsigned int mie_value = 0x430000; // Timer2 interrupt - IRQ 17, 16, and 22
+  unsigned int mstatus_value = 8;     // MIE bit = 1
+  unsigned int mie_value = 0x430000;  // Timer2 interrupt - IRQ 17, 16, and 22
   unsigned int mtvec_value = (unsigned int)&interrupt_handler;
 
   // Initialize double buffering
@@ -38372,7 +38370,6 @@ game:
 
   /* Main game loop */
   while (1) {
-
     // rpint the clear screen flag
 
     clear_screen();
@@ -38488,7 +38485,7 @@ void draw_finishpage(void) {
   // Set pixel buffer to Buffer1
   *(pixel_ctrl_ptr + 1) = (int)Buffer1;
   wait_for_vsync();
-  pixel_buffer_start_for_front = (uint16_t *)Buffer1; // Assign pointer
+  pixel_buffer_start_for_front = (uint16_t *)Buffer1;  // Assign pointer
 
   // Draw the 320x240 image (16-bit 5-6-5 RGB)
   for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
@@ -38522,10 +38519,10 @@ void draw_finishpage(void) {
 /* Timer 2 configuration */
 void config_timer2() {
   volatile unsigned int *timer = (volatile unsigned int *)TIMER2_BASE;
-  int delay = 100000000; // 1s at 100 MHz
+  int delay = 100000000;  // 1s at 100 MHz
   timer[2] = delay & 0xFFFF;
   timer[3] = (delay >> 16) & 0xFFFF;
-  timer[1] = 7; // START, CONT, ITO
+  timer[1] = 7;  // START, CONT, ITO
   count_pause = 0;
 }
 
@@ -38558,13 +38555,13 @@ void draw_startpage(void) {
   // Set pixel buffer to Buffer1
   *(pixel_ctrl_ptr + 1) = (int)Buffer1;
   wait_for_vsync();
-  pixel_buffer_start_for_front = (uint16_t *)Buffer1; // Assign pointer
+  pixel_buffer_start_for_front = (uint16_t *)Buffer1;  // Assign pointer
 
   // Draw the 320x240 image (16-bit 5-6-5 RGB)
   for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
     for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
       pixel_buffer_start_for_front[y * 512 + x] =
-          golfthisone[pixel_index++]; // Use correct stride (512)
+          golfthisone[pixel_index++];  // Use correct stride (512)
     }
   }
 
@@ -38578,7 +38575,7 @@ void draw_startpage(void) {
   for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
     for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
       pixel_buffer_start_for_front[y * 512 + x] =
-          golfthisone[pixel_index++]; // Use correct stride (512)
+          golfthisone[pixel_index++];  // Use correct stride (512)
     }
   }
 }
@@ -38586,17 +38583,16 @@ void draw_startpage(void) {
 // Draw the start page (background)
 void draw_lost(void) {
   int pixel_index = 0;
-
   // Set pixel buffer to Buffer1
   *(pixel_ctrl_ptr + 1) = (int)Buffer1;
   wait_for_vsync();
-  pixel_buffer_start_for_front = (uint16_t *)Buffer1; // Assign pointer
+  pixel_buffer_start_for_front = (uint16_t *)Buffer1;  // Assign pointer
 
   // Draw the 320x240 image (16-bit 5-6-5 RGB)
   for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
     for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
       pixel_buffer_start_for_front[y * 512 + x] =
-          lost_round[pixel_index++]; // Use correct stride (512)
+          lost_round[pixel_index++];  // Use correct stride (512)
     }
   }
 
@@ -38610,7 +38606,7 @@ void draw_lost(void) {
   for (int y = 0; y < GOLFTHISONE_HEIGHT; y++) {
     for (int x = 0; x < GOLFTHISONE_WIDTH; x++) {
       pixel_buffer_start_for_front[y * 512 + x] =
-          lost_round[pixel_index++]; // Use correct stride (512)
+          lost_round[pixel_index++];  // Use correct stride (512)
     }
   }
 }
@@ -38674,7 +38670,6 @@ void generate_course(Course *course, int course_id) {
   }
 
   else if (course_id = 2) {
-
     // 2nd horizontal from top
     course->lines[line_index].x0 = 0;
     course->lines[line_index].y0 = 100;
@@ -38780,7 +38775,7 @@ void draw_attempts(int x, int y, int number, short int number_color,
 /* Draw direction arrow */
 void draw_arrow(int center_x, int center_y, float cos_val, float sin_val,
                 short int arrow_color) {
-  int arrow_length = 20; // Reduced length for better visualization
+  int arrow_length = 20;  // Reduced length for better visualization
   int tip_x = center_x + (int)(cos_val * arrow_length);
   int tip_y = center_y + (int)(sin_val * arrow_length);
 
@@ -38811,14 +38806,10 @@ void draw_ball(int x, int y, short int color) {
   int bottom = y + radius;
 
   // Clip to screen boundaries
-  if (left < 0)
-    left = 0;
-  if (right >= SCREEN_WIDTH)
-    right = SCREEN_WIDTH - 1;
-  if (top < 0)
-    top = 0;
-  if (bottom >= SCREEN_HEIGHT)
-    bottom = SCREEN_HEIGHT - 1;
+  if (left < 0) left = 0;
+  if (right >= SCREEN_WIDTH) right = SCREEN_WIDTH - 1;
+  if (top < 0) top = 0;
+  if (bottom >= SCREEN_HEIGHT) bottom = SCREEN_HEIGHT - 1;
 
   // Draw circle using distance check
   for (int i = left; i <= right; i++) {
@@ -38836,8 +38827,7 @@ void draw_ball(int x, int y, short int color) {
 int wait_for_vsync() {
   volatile int *pixel_ctrl_ptr = (int *)PIXEL_BUF_CTRL;
   *pixel_ctrl_ptr = 1;
-  while ((*(pixel_ctrl_ptr + 3) & 0x1) != 0)
-    ;
+  while ((*(pixel_ctrl_ptr + 3) & 0x1) != 0);
   return 0;
 }
 
@@ -38915,14 +38905,13 @@ void clear_timer_area() {
 
 /* Shoot ball with given momentum and angle */
 void shoot_the_ball(int player, int momentum, double angle) {
-  if (player < 0 || player >= PLAYER_NUM)
-    return;
+  if (player < 0 || player >= PLAYER_NUM) return;
 
   // Clear the ps/2 keyboard fifo to prevent buffered key presses
   clear_ps2_fifo();
 
   // Calculate velocity components
-  float speed_factor = 2.0 + (momentum / 20.0);
+  float speed_factor = 2.0 + (momentum / 10.0);
   balls[player].dx = cosf(angle) * speed_factor;
   balls[player].dy = sinf(angle) * speed_factor;
   balls[player].momentum = momentum / 2;
@@ -38937,15 +38926,20 @@ void shoot_the_ball(int player, int momentum, double angle) {
 
 /* Update ball position and handle collisions */
 void move_ball(int player, Course *course) {
-  if (player < 0 || player >= PLAYER_NUM || !balls[player].isActive)
-    return;
+  if (player < 0 || player >= PLAYER_NUM || !balls[player].isActive) return;
+
+  if(balls[player].momentum %2 ==0){
+    balls[player].dx *= 0.95f;
+    balls[player].dy *= 0.95f;
+  }
+
 
   // If momentum depleted, stop ball
   if (balls[player].momentum <= 0) {
     balls[player].dx = 0;
     balls[player].dy = 0;
     balls[player].isActive = 0;
-    button_used = 0; // Allow new shots
+    button_used = 0;  // Allow new shots
 
     // Update player position to match the ball's final position
     player_x = balls[player].x;
@@ -38971,7 +38965,7 @@ void move_ball(int player, Course *course) {
   if (new_x < BALL_SIZE) {
     new_x = BALL_SIZE;
     balls[player].dx =
-        -balls[player].dx * 0.8f; // Some energy loss on collision
+        -balls[player].dx * 0.8f;  // Some energy loss on collision
   } else if (new_x > SCREEN_WIDTH - BALL_SIZE) {
     new_x = SCREEN_WIDTH - BALL_SIZE;
     balls[player].dx = -balls[player].dx * 0.8f;
@@ -39013,10 +39007,9 @@ void move_ball(int player, Course *course) {
 
 /* Check if the moving ball hit the wall, and if so, bounce */
 void check_wall_collision(int player, Course *course) {
-  if (player < 0 || player >= PLAYER_NUM || !balls[player].isActive)
-    return;
+  if (player < 0 || player >= PLAYER_NUM || !balls[player].isActive) return;
 
-  float collision_margin = 0.5f; // Add a small margin to avoid getting stuck
+  float collision_margin = 0.5f;  // Add a small margin to avoid getting stuck
 
   // Check if the ball hit any of the course walls
   for (int i = 0; i < LINE_NUM; i++) {
@@ -39026,7 +39019,6 @@ void check_wall_collision(int player, Course *course) {
               course->lines[i].x0 - collision_margin &&
           balls[player].x - balls[player].radius <=
               course->lines[i].x0 + collision_margin) {
-
         // Check if ball is within the vertical range of the line
         // Handle both cases: y0 <= y1 and y0 > y1
         if ((course->lines[i].y0 <= course->lines[i].y1 &&
@@ -39035,7 +39027,6 @@ void check_wall_collision(int player, Course *course) {
             (course->lines[i].y0 > course->lines[i].y1 &&
              balls[player].y + balls[player].radius >= course->lines[i].y1 &&
              balls[player].y - balls[player].radius <= course->lines[i].y0)) {
-
           // Move the ball away from the wall to prevent sticking
           if (balls[player].dx > 0) {
             balls[player].x =
@@ -39055,11 +39046,9 @@ void check_wall_collision(int player, Course *course) {
               course->lines[i].y0 - collision_margin &&
           balls[player].y - balls[player].radius <=
               course->lines[i].y0 + collision_margin) {
-
         // Check if ball is within the horizontal range of the line
         if (balls[player].x + balls[player].radius >= course->lines[i].x0 &&
             balls[player].x - balls[player].radius <= course->lines[i].x1) {
-
           // Move the ball away from the wall to prevent sticking
           if (balls[player].dy > 0) {
             balls[player].y =
@@ -39103,32 +39092,32 @@ void display_count(int value) {
 }
 
 /* Update LED states */
+/*
 void led_update() {
-  volatile unsigned int *leds = (volatile unsigned int *)LED_BASE;
-  int led_state = 0;
+    volatile unsigned int* leds = (volatile unsigned int*)LED_BASE;
+    int led_state = 0;
 
-  if (led0_on)
-    led_state |= 1;
-  if (led1_on)
-    led_state |= 2;
+    if (led0_on) led_state |= 1;
+    if (led1_on) led_state |= 2;
 
-  *leds = led_state;
+    *leds = led_state;
 }
+*/
 
 /* Configure PS/2 keyboard */
 void config_ps2() {
   volatile unsigned int *ps2 = (volatile unsigned int *)PS2_BASE;
-  ps2[1] = 1; // Enable interrupts
+  ps2[1] = 1;  // Enable interrupts
 }
 
 /* Configure timer */
 void config_timer() {
   volatile unsigned int *timer = (volatile unsigned int *)TIMER_BASE;
-  int delay = 5000000; // 0.05s at 100 MHz
+  int delay = 5000000;  // 0.05s at 100 MHz
 
   timer[2] = delay & 0xFFFF;
   timer[3] = (delay >> 16) & 0xFFFF;
-  timer[1] = 7; // START, CONT, ITO
+  timer[1] = 7;  // START, CONT, ITO
 }
 
 /* Interrupt handler */
@@ -39137,17 +39126,16 @@ void __attribute__((interrupt)) interrupt_handler() {
   __asm__ volatile("csrr %0, mcause" : "=r"(mcause));
   mcause = mcause & 0x7FFFFFFF;
 
-  if (mcause == 17) { // Timer2 interrupt - countdown timer
+  if (mcause == 17) {  // Timer2 interrupt - countdown timer
     if (!count_pause && countdown > 0) {
       countdown--;
     }
     volatile unsigned int *timer = (volatile unsigned int *)TIMER2_BASE;
-    timer[0] = 1;            // Clear interrupt
-  } else if (mcause == 16) { // Timer interrupt - for power counter
+    timer[0] = 1;             // Clear interrupt
+  } else if (mcause == 16) {  // Timer interrupt - for power counter
     if (run) {
       count = count + 1;
-      if (count > 100)
-        count = 1;
+      if (count > 100) count = 1;
       display_count(count);
     }
 
@@ -39169,7 +39157,7 @@ void __attribute__((interrupt)) interrupt_handler() {
     // Clear interrupt
     volatile unsigned int *timer = (volatile unsigned int *)TIMER_BASE;
     timer[0] = 1;
-  } else if (mcause == 22) { // Keyboard interrupt
+  } else if (mcause == 22) {  // Keyboard interrupt
     volatile unsigned int *ps2 = (volatile unsigned int *)PS2_BASE;
 
     // Process all available data
@@ -39177,34 +39165,34 @@ void __attribute__((interrupt)) interrupt_handler() {
       unsigned int ps2_data = ps2[0];
       unsigned int data = ps2_data & 0xFF;
 
-      if (data == 0xF0) { // Break code
+      if (data == 0xF0) {  // Break code
         break_code = 1;
-      } else if (data == 0xE0) { // Extended key prefix
+      } else if (data == 0xE0) {  // Extended key prefix
         extended_code = 1;
       } else {
-        if (break_code) { // Key release
+        if (break_code) {  // Key release
 
           if (data == 0x5A) {
             printf("hello world");
             clear_screen_flag = false;
           }
 
-          if (data == 0x6B) { // Left arrow
+          if (data == 0x6B) {  // Left arrow
             led0_on = 0;
           }
-          if (data == 0x74) { // Right arrow
+          if (data == 0x74) {  // Right arrow
             led1_on = 0;
-          } else if (data == 0x29) { // Spacebar
+          } else if (data == 0x29) {  // Spacebar
             spacebar_pressed = 0;
           }
           break_code = 0;
-          extended_code = 0; // Also reset extended code
-        } else {             // Key press
-          if (data == 0x29 && !button_used && !balls[0].isActive) { // Spacebar
+          extended_code = 0;  // Also reset extended code
+        } else {              // Key press
+          if (data == 0x29 && !button_used && !balls[0].isActive) {  // Spacebar
             spacebar_pressed = 1;
-          } else if (data == 0x6B) { // Left arrow
+          } else if (data == 0x6B) {  // Left arrow
             led0_on = 1;
-          } else if (data == 0x74) { // Right arrow
+          } else if (data == 0x74) {  // Right arrow
             led1_on = 1;
           } else if (data == 0x5A) {
             clear_screen_flag = true;
@@ -39219,73 +39207,73 @@ void __attribute__((interrupt)) interrupt_handler() {
       }
     }
 
-    led_update();
+    //  led_update();
   }
 }
 
 /* Draw single digit */
 void draw_digit(int x, int y, int digit, short int color) {
   switch (digit) {
-  case 9:
-    draw_line(x, y, x + 8, y, color);           // top
-    draw_line(x, y, x, y + 6, color);           // left upper
-    draw_line(x + 8, y, x + 8, y + 12, color);  // right
-    draw_line(x, y + 6, x + 8, y + 6, color);   // middle
-    draw_line(x, y + 12, x + 8, y + 12, color); // bottom
-    break;
-  case 8:
-    draw_line(x, y, x + 8, y, color);           // top
-    draw_line(x, y, x, y + 12, color);          // left
-    draw_line(x + 8, y, x + 8, y + 12, color);  // right
-    draw_line(x, y + 6, x + 8, y + 6, color);   // middle
-    draw_line(x, y + 12, x + 8, y + 12, color); // bottom
-    break;
-  case 7:
-    draw_line(x, y, x + 8, y, color);          // top
-    draw_line(x + 8, y, x + 8, y + 12, color); // right
-    break;
-  case 6:
-    draw_line(x, y, x + 8, y, color);              // top
-    draw_line(x, y, x, y + 12, color);             // left
-    draw_line(x, y + 6, x + 8, y + 6, color);      // middle
-    draw_line(x + 8, y + 6, x + 8, y + 12, color); // right
-    draw_line(x, y + 12, x + 8, y + 12, color);    // bottom
-    break;
+    case 9:
+      draw_line(x, y, x + 8, y, color);            // top
+      draw_line(x, y, x, y + 6, color);            // left upper
+      draw_line(x + 8, y, x + 8, y + 12, color);   // right
+      draw_line(x, y + 6, x + 8, y + 6, color);    // middle
+      draw_line(x, y + 12, x + 8, y + 12, color);  // bottom
+      break;
+    case 8:
+      draw_line(x, y, x + 8, y, color);            // top
+      draw_line(x, y, x, y + 12, color);           // left
+      draw_line(x + 8, y, x + 8, y + 12, color);   // right
+      draw_line(x, y + 6, x + 8, y + 6, color);    // middle
+      draw_line(x, y + 12, x + 8, y + 12, color);  // bottom
+      break;
+    case 7:
+      draw_line(x, y, x + 8, y, color);           // top
+      draw_line(x + 8, y, x + 8, y + 12, color);  // right
+      break;
+    case 6:
+      draw_line(x, y, x + 8, y, color);               // top
+      draw_line(x, y, x, y + 12, color);              // left
+      draw_line(x, y + 6, x + 8, y + 6, color);       // middle
+      draw_line(x + 8, y + 6, x + 8, y + 12, color);  // right
+      draw_line(x, y + 12, x + 8, y + 12, color);     // bottom
+      break;
 
-  case 5:
-    draw_line(x, y, x + 8, y, color);
-    draw_line(x, y, x, y + 6, color);
-    draw_line(x, y + 6, x + 8, y + 6, color);
-    draw_line(x + 8, y + 6, x + 8, y + 12, color);
-    draw_line(x, y + 12, x + 8, y + 12, color);
-    break;
-  case 4:
-    draw_line(x, y, x, y + 6, color);
-    draw_line(x, y + 6, x + 8, y + 6, color);
-    draw_line(x + 8, y, x + 8, y + 12, color);
-    break;
-  case 3:
-    draw_line(x, y, x + 8, y, color);
-    draw_line(x + 8, y, x + 8, y + 12, color);
-    draw_line(x, y + 6, x + 8, y + 6, color);
-    draw_line(x, y + 12, x + 8, y + 12, color);
-    break;
-  case 2:
-    draw_line(x, y, x + 8, y, color);
-    draw_line(x + 8, y, x + 8, y + 6, color);
-    draw_line(x, y + 6, x + 8, y + 6, color);
-    draw_line(x, y + 6, x, y + 12, color);
-    draw_line(x, y + 12, x + 8, y + 12, color);
-    break;
-  case 1:
-    draw_line(x + 4, y, x + 4, y + 12, color);
-    break;
-  case 0:
-    draw_line(x, y, x + 8, y, color);
-    draw_line(x, y, x, y + 12, color);
-    draw_line(x + 8, y, x + 8, y + 12, color);
-    draw_line(x, y + 12, x + 8, y + 12, color);
-    break;
+    case 5:
+      draw_line(x, y, x + 8, y, color);
+      draw_line(x, y, x, y + 6, color);
+      draw_line(x, y + 6, x + 8, y + 6, color);
+      draw_line(x + 8, y + 6, x + 8, y + 12, color);
+      draw_line(x, y + 12, x + 8, y + 12, color);
+      break;
+    case 4:
+      draw_line(x, y, x, y + 6, color);
+      draw_line(x, y + 6, x + 8, y + 6, color);
+      draw_line(x + 8, y, x + 8, y + 12, color);
+      break;
+    case 3:
+      draw_line(x, y, x + 8, y, color);
+      draw_line(x + 8, y, x + 8, y + 12, color);
+      draw_line(x, y + 6, x + 8, y + 6, color);
+      draw_line(x, y + 12, x + 8, y + 12, color);
+      break;
+    case 2:
+      draw_line(x, y, x + 8, y, color);
+      draw_line(x + 8, y, x + 8, y + 6, color);
+      draw_line(x, y + 6, x + 8, y + 6, color);
+      draw_line(x, y + 6, x, y + 12, color);
+      draw_line(x, y + 12, x + 8, y + 12, color);
+      break;
+    case 1:
+      draw_line(x + 4, y, x + 4, y + 12, color);
+      break;
+    case 0:
+      draw_line(x, y, x + 8, y, color);
+      draw_line(x, y, x, y + 12, color);
+      draw_line(x + 8, y, x + 8, y + 12, color);
+      draw_line(x, y + 12, x + 8, y + 12, color);
+      break;
   }
 }
 
